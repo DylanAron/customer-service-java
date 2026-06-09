@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(winget install *)",
+      "Bash(mkdir -p \"D:/install/redis\")",
+      "Bash(cp -r \"C:/Program Files/Redis/\"* \"D:/install/redis/\")",
+      "Bash(ls \"D:/install/redis/\" | head -20)",
+      "Bash(cp \"D:/install/redis/redis.windows.conf\" \"D:/install/redis/redis.conf\" 2>/dev/null; echo \"config copied\")",
+      "Bash(where \"Another Redis Desktop Manager\")",
+      "Read(//c/Users/Dell/AppData/Local/Programs/**)",
+      "Read(//c/Users/Dell/AppData/Local/**)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Users/Dell/scoop/**)"
+    ]
+  }
+}

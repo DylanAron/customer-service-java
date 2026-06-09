@@ -1,0 +1,33 @@
+# Maven build output
+target/
+target-new/
+
+# Java compiled classes
+*.class
+
+# Packaged archives
+*.jar
+*.war
+*.ear
+
+# Logs
+logs/
+*.log
+
+# Uploaded user files (runtime generated)
+uploads/
+*.bak
+
+# IDE (project-level)
+.idea/
+.vscode/
+*.iml
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Spring Boot application runtime
+*.pid
+heapdump.hprof
