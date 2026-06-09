@@ -3,16 +3,15 @@ package com.customer.controller;
 import com.customer.entity.Message;
 import com.customer.service.MessageService;
 import com.customer.service.RedisAssignmentService;
+import com.customer.storage.FileInfo;
+import com.customer.storage.FileStorageService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/message")
@@ -20,13 +19,16 @@ public class MessageController {
     private final MessageService messageService;
     private final RedisAssignmentService assignmentService;
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+    private final FileStorageService fileStorageService;
 
     public MessageController(MessageService messageService,
                              RedisAssignmentService assignmentService,
-                             org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
+                             org.springframework.jdbc.core.JdbcTemplate jdbcTemplate,
+                             FileStorageService fileStorageService) {
         this.messageService = messageService;
         this.assignmentService = assignmentService;
         this.jdbcTemplate = jdbcTemplate;
+        this.fileStorageService = fileStorageService;
     }
 
     @GetMapping("/history/{userId}")
@@ -75,22 +77,11 @@ public class MessageController {
             return ResponseEntity.badRequest().body(Map.of("error", "文件为空"));
         }
         try {
-            String uploadDir = System.getProperty("user.dir") + "/uploads/";
-            File dir = new File(uploadDir);
-            if (!dir.exists()) dir.mkdirs();
-
-            String ext = "";
-            String originalName = file.getOriginalFilename();
-            if (originalName != null && originalName.contains(".")) {
-                ext = originalName.substring(originalName.lastIndexOf("."));
-            }
-            String fileName = UUID.randomUUID().toString() + ext;
-            File dest = new File(uploadDir + fileName);
-            file.transferTo(dest);
-
-            String url = "/uploads/" + fileName;
-            System.out.println("File uploaded: " + dest.getAbsolutePath());
-            return ResponseEntity.ok(Map.of("url", url, "fileName", originalName));
+            FileInfo info = fileStorageService.save(file);
+            return ResponseEntity.ok(Map.of(
+                "url", info.getUrl(),
+                "fileName", info.getFilename()
+            ));
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.internalServerError().body(Map.of("error", "上传失败: " + e.getMessage()));

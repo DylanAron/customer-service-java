@@ -25,6 +25,12 @@ public class NettyWebSocketServer {
     @Value("${websocket.port:9090}")
     private int port;
 
+    @Value("${websocket.boss-threads:1}")
+    private int bossThreads;
+
+    @Value("${websocket.worker-threads:0}")   // 0 = Netty 默认（CPU 核数 × 2）
+    private int workerThreads;
+
     private final MessageService messageService;
     private final AgentService agentService;
     private final RedisAssignmentService assignmentService;
@@ -47,8 +53,17 @@ public class NettyWebSocketServer {
 
     @PostConstruct
     public void start() {
-        bossGroup = new NioEventLoopGroup(1);
-        workerGroup = new NioEventLoopGroup();
+        bossGroup = new NioEventLoopGroup(bossThreads);
+        // workerThreads ≤ 0 时使用 Netty 默认值（Runtime.getRuntime().availableProcessors() × 2）
+        workerGroup = workerThreads > 0 ? new NioEventLoopGroup(workerThreads) : new NioEventLoopGroup();
+
+        // ========== 兜底：JVM 关闭钩子 ==========
+        // 当进程被 kill/Ctrl+C 时，确保 Netty 线程停止、端口释放。
+        // @PreDestroy 在正常 Spring 关闭时也做同样的事，但强制杀进程时只有 shutdownHook 可靠。
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("JVM shutting down, stopping Netty WebSocket server...");
+            stopNetty();
+        }));
 
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
@@ -79,7 +94,16 @@ public class NettyWebSocketServer {
 
     @PreDestroy
     public void stop() {
-        if (bossGroup != null) bossGroup.shutdownGracefully();
-        if (workerGroup != null) workerGroup.shutdownGracefully();
+        System.out.println("Spring shutting down, stopping Netty WebSocket server...");
+        stopNetty();
+    }
+
+    private void stopNetty() {
+        if (bossGroup != null && !bossGroup.isShuttingDown()) {
+            bossGroup.shutdownGracefully();
+        }
+        if (workerGroup != null && !workerGroup.isShuttingDown()) {
+            workerGroup.shutdownGracefully();
+        }
     }
 }

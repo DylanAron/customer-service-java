@@ -1,8 +1,9 @@
 package com.customer.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.customer.constant.ApiConst;
 import com.customer.entity.Agent;
-import com.customer.repository.AgentRepository;
+import com.customer.repository.AgentMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -24,12 +25,12 @@ public class RedisAssignmentService {
     private static final Logger log = LoggerFactory.getLogger(RedisAssignmentService.class);
 
     private final RedisTemplate<String, String> redisTemplate;
-    private final AgentRepository agentRepository;
+    private final AgentMapper agentMapper;
 
     public RedisAssignmentService(RedisTemplate<String, String> redisTemplate,
-                                   AgentRepository agentRepository) {
+                                   AgentMapper agentMapper) {
         this.redisTemplate = redisTemplate;
-        this.agentRepository = agentRepository;
+        this.agentMapper = agentMapper;
     }
 
     /**
@@ -56,7 +57,8 @@ public class RedisAssignmentService {
         }
 
         // 2. Pick online agents from DB
-        List<Agent> onlineAgents = agentRepository.findByOnlineTrue();
+        List<Agent> onlineAgents = agentMapper.selectList(
+                new LambdaQueryWrapper<Agent>().eq(Agent::isOnline, true));
         List<Agent> available = onlineAgents.stream()
                 .filter(Agent::isEnabled)
                 .filter(a -> isAgentOnline(a.getId()))
@@ -86,33 +88,16 @@ public class RedisAssignmentService {
         return agentId;
     }
 
-    /**
-     * Get the currently assigned agent for a user.
-     *
-     * @param userId the user
-     * @return agentId, or null if not assigned
-     */
     public Long getAssignedAgent(String userId) {
         String val = redisTemplate.opsForValue().get(ApiConst.REDIS_KEY_ASSIGNMENT_USER + userId);
         return val != null ? Long.parseLong(val) : null;
     }
 
-    /**
-     * Get all users assigned to a specific agent.
-     *
-     * @param agentId the agent
-     * @return list of userIds
-     */
     public List<String> getUsersForAgent(Long agentId) {
         Set<String> users = redisTemplate.opsForSet().members(ApiConst.REDIS_KEY_ASSIGNMENT_AGENT + agentId);
         return users != null ? new ArrayList<>(users) : List.of();
     }
 
-    /**
-     * Remove assignment for a user.
-     *
-     * @param userId the user to remove
-     */
     public void removeUser(String userId) {
         String agentIdStr = redisTemplate.opsForValue().get(ApiConst.REDIS_KEY_ASSIGNMENT_USER + userId);
         if (agentIdStr != null) {
@@ -121,33 +106,16 @@ public class RedisAssignmentService {
         redisTemplate.delete(ApiConst.REDIS_KEY_ASSIGNMENT_USER + userId);
     }
 
-    /**
-     * Check if an agent is online via Redis.
-     *
-     * @param agentId the agent
-     * @return true if online
-     */
     public boolean isAgentOnline(Long agentId) {
         Boolean exists = redisTemplate.hasKey(ApiConst.REDIS_KEY_AGENT_ONLINE + agentId);
         return Boolean.TRUE.equals(exists);
     }
 
-    /**
-     * Check if a user is online via Redis.
-     *
-     * @param userId the user
-     * @return true if online
-     */
     public boolean isUserOnline(String userId) {
         Boolean exists = redisTemplate.hasKey(ApiConst.REDIS_KEY_USER_ONLINE + userId);
         return Boolean.TRUE.equals(exists);
     }
 
-    /**
-     * Mark agent as online in Redis with TTL heartbeat.
-     *
-     * @param agentId the agent
-     */
     public void markAgentOnline(Long agentId) {
         redisTemplate.opsForValue().set(
                 ApiConst.REDIS_KEY_AGENT_ONLINE + agentId,
@@ -155,11 +123,6 @@ public class RedisAssignmentService {
                 Duration.ofSeconds(ApiConst.TTL_ONLINE));
     }
 
-    /**
-     * Mark user as online in Redis with TTL heartbeat.
-     *
-     * @param userId the user
-     */
     public void markUserOnline(String userId) {
         redisTemplate.opsForValue().set(
                 ApiConst.REDIS_KEY_USER_ONLINE + userId,
@@ -167,29 +130,14 @@ public class RedisAssignmentService {
                 Duration.ofSeconds(ApiConst.TTL_ONLINE));
     }
 
-    /**
-     * Remove agent online marker.
-     *
-     * @param agentId the agent
-     */
     public void markAgentOffline(Long agentId) {
         redisTemplate.delete(ApiConst.REDIS_KEY_AGENT_ONLINE + agentId);
     }
 
-    /**
-     * Remove user online marker.
-     *
-     * @param userId the user
-     */
     public void markUserOffline(String userId) {
         redisTemplate.delete(ApiConst.REDIS_KEY_USER_ONLINE + userId);
     }
 
-    /**
-     * Record user last visit for welcome-message dedup.
-     *
-     * @param userId the user
-     */
     public void touchUserLastVisit(String userId) {
         redisTemplate.opsForValue().set(
                 ApiConst.REDIS_KEY_USER_LAST_VISIT + userId,
@@ -197,12 +145,6 @@ public class RedisAssignmentService {
                 Duration.ofSeconds(ApiConst.TTL_LAST_VISIT));
     }
 
-    /**
-     * Check if user visited recently (within TTL_LAST_VISIT).
-     *
-     * @param userId the user
-     * @return true if recently visited
-     */
     public boolean hasRecentVisit(String userId) {
         return Boolean.TRUE.equals(redisTemplate.hasKey(ApiConst.REDIS_KEY_USER_LAST_VISIT + userId));
     }

@@ -1,19 +1,19 @@
 server:
-  port: 8080
+  port: 8089
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   datasource:
     url: jdbc:mysql://localhost:3306/customer-service?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: false
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
+  sql:
+    init:
+      mode: always
+      continue-on-error: true
   servlet:
     multipart:
       max-file-size: 100MB
@@ -29,9 +29,25 @@ spring:
           max-idle: 8
           min-idle: 2
 
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.customer.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
 websocket:
   port: 9090
+  boss-threads: 1       # 接受连接线程（固定 1 即可）
+  worker-threads: 0     # 0 = Netty 默认（CPU 核数 × 2），IO 密集型任务推荐 CPU 核数 × 2
 
 jwt:
   secret: customer-service-secret-key-2024-very-secure
   expiration: 86400000
+
+# ========== File Storage ==========
+# Default: project-root/filesUpload/  (images/ and files/ sub-directories, daily yyyy/MM/dd)
+storage:
+  local:
+    base-path:              # empty = <project-root>/filesUpload/
+  url-prefix: /uploads      # URL path to access uploaded files

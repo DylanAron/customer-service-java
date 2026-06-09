@@ -1,37 +1,33 @@
 package com.customer.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "cs_agent")
+@TableName("cs_agent")
 public class Agent {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(unique = true, nullable = false, columnDefinition = "VARCHAR(255) COMMENT '登录用户名'")
     private String username;
 
-    @Column(nullable = false, columnDefinition = "VARCHAR(255) COMMENT '登录密码'")
     private String password;
 
-    @Column(columnDefinition = "VARCHAR(255) COMMENT '客服昵称'")
     private String nickname;
 
-    @Column(columnDefinition = "TINYINT(1) DEFAULT 1 COMMENT '是否启用'")
     private boolean enabled = true;
 
-    @Column(columnDefinition = "TINYINT(1) DEFAULT 0 COMMENT '是否在线'")
     private boolean online = false;
 
-    @Column(name = "last_login_time", columnDefinition = "DATETIME COMMENT '最后登录时间'")
+    @TableField("last_login_time")
     private LocalDateTime lastLoginTime;
 
-    @Column(name = "created_at", columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'")
+    @TableField("created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    @Column(name = "updated_at", columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'")
+    @TableField("updated_at")
     private LocalDateTime updatedAt = LocalDateTime.now();
 
     public Long getId() { return id; }

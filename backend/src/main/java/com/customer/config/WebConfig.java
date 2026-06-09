@@ -1,13 +1,22 @@
 package com.customer.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-import org.springframework.web.servlet.resource.PathResourceResolver;
+
+import java.nio.file.Paths;
 
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
+
+    @Value("${storage.local.base-path:}")
+    private String storageBasePath;
+
+    @Value("${storage.url-prefix:/uploads}")
+    private String urlPrefix;
+
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
@@ -19,9 +28,15 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        String uploadPath = "file:" + System.getProperty("user.dir") + "/uploads/";
-        registry.addResourceHandler("/uploads/**")
-                .addResourceLocations(uploadPath)
+        // Resolve storage root: default to project-root/filesUpload/
+        String basePath = storageBasePath;
+        if (basePath == null || basePath.isBlank()) {
+            basePath = Paths.get(System.getProperty("user.dir")).getParent().resolve("filesUpload").toString();
+        }
+        String absolutePath = "file:" + Paths.get(basePath).normalize().toAbsolutePath().toString().replace("\\", "/") + "/";
+
+        registry.addResourceHandler(urlPrefix + "/**")
+                .addResourceLocations(absolutePath)
                 .setCachePeriod(0);
     }
 }

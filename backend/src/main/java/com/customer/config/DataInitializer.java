@@ -1,63 +1,63 @@
 package com.customer.config;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.customer.entity.Agent;
-import com.customer.repository.AgentRepository;
+import com.customer.repository.AgentMapper;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
 public class DataInitializer implements CommandLineRunner {
-    private final AgentRepository agentRepository;
+    private final AgentMapper agentMapper;
     private final JdbcTemplate jdbcTemplate;
 
-    public DataInitializer(AgentRepository agentRepository, JdbcTemplate jdbcTemplate) {
-        this.agentRepository = agentRepository;
+    public DataInitializer(AgentMapper agentMapper, JdbcTemplate jdbcTemplate) {
+        this.agentMapper = agentMapper;
         this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
     public void run(String... args) {
-        // Apply column comments to existing tables (Hibernate ddl-auto=update does not add comments)
         addColumnComments();
 
-        if (agentRepository.findByUsername("admin").isEmpty()) {
+        if (agentMapper.selectOne(new LambdaQueryWrapper<Agent>().eq(Agent::getUsername, "admin")) == null) {
             Agent admin = new Agent();
             admin.setUsername("admin");
             admin.setPassword("admin123");
             admin.setNickname("管理员");
             admin.setEnabled(true);
-            agentRepository.save(admin);
+            agentMapper.insert(admin);
             System.out.println("Admin user created: admin/admin123");
         }
 
-        if (agentRepository.findByUsername("kf1").isEmpty()) {
+        if (agentMapper.selectOne(new LambdaQueryWrapper<Agent>().eq(Agent::getUsername, "kf1")) == null) {
             Agent kf1 = new Agent();
             kf1.setUsername("kf1");
             kf1.setPassword("123456");
             kf1.setNickname("客服1");
             kf1.setEnabled(true);
-            agentRepository.save(kf1);
+            agentMapper.insert(kf1);
             System.out.println("Agent created: kf1/123456");
         }
 
-        if (agentRepository.findByUsername("kf2").isEmpty()) {
+        if (agentMapper.selectOne(new LambdaQueryWrapper<Agent>().eq(Agent::getUsername, "kf2")) == null) {
             Agent kf2 = new Agent();
             kf2.setUsername("kf2");
             kf2.setPassword("123456");
             kf2.setNickname("客服2");
             kf2.setEnabled(true);
-            agentRepository.save(kf2);
+            agentMapper.insert(kf2);
             System.out.println("Agent created: kf2/123456");
         }
 
-        if (agentRepository.findByUsername("kf3").isEmpty()) {
+        if (agentMapper.selectOne(new LambdaQueryWrapper<Agent>().eq(Agent::getUsername, "kf3")) == null) {
             Agent kf3 = new Agent();
             kf3.setUsername("kf3");
             kf3.setPassword("123456");
             kf3.setNickname("客服3");
             kf3.setEnabled(true);
-            agentRepository.save(kf3);
+            agentMapper.insert(kf3);
             System.out.println("Agent created: kf3/123456");
         }
     }
@@ -113,7 +113,6 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private String getColumnType(String table, String column) {
-        // We check if the column exists and preserve its type
         try {
             var result = jdbcTemplate.queryForRowSet(
                 "SELECT COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA FROM INFORMATION_SCHEMA.COLUMNS " +
@@ -139,7 +138,6 @@ public class DataInitializer implements CommandLineRunner {
                 return sb.toString();
             }
         } catch (Exception ignored) {}
-        // Fallback: use common types
         if (column.equals("id")) return "BIGINT NOT NULL auto_increment";
         if (column.contains("is_")) return "TINYINT(1) DEFAULT 0";
         if (column.equals("content")) return "TEXT NOT NULL";

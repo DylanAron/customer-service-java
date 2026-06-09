@@ -1,26 +1,25 @@
 package com.customer.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.customer.entity.CsUser;
 import com.customer.entity.Message;
-import com.customer.repository.CsUserRepository;
-import com.customer.repository.MessageRepository;
-import com.customer.constant.ApiConst;
+import com.customer.repository.CsUserMapper;
+import com.customer.repository.MessageMapper;
 import org.springframework.stereotype.Service;
-import org.springframework.data.domain.PageRequest;
 
 import java.time.LocalDateTime;
 import java.util.*;
 
 @Service
 public class MessageService {
-    private final MessageRepository messageRepository;
-    private final CsUserRepository csUserRepository;
+    private final MessageMapper messageMapper;
+    private final CsUserMapper csUserMapper;
     private final RedisAssignmentService assignmentService;
 
-    public MessageService(MessageRepository messageRepository, CsUserRepository csUserRepository,
+    public MessageService(MessageMapper messageMapper, CsUserMapper csUserMapper,
                           RedisAssignmentService assignmentService) {
-        this.messageRepository = messageRepository;
-        this.csUserRepository = csUserRepository;
+        this.messageMapper = messageMapper;
+        this.csUserMapper = csUserMapper;
         this.assignmentService = assignmentService;
     }
 
@@ -39,61 +38,67 @@ public class MessageService {
         msg.setChannelCode(channelCode);
         msg.setRead(false);
         msg.setCreatedAt(LocalDateTime.now());
-        messageRepository.save(msg);
+        messageMapper.insert(msg);
 
-        if (csUserRepository.findByUserId(userId).isEmpty()) {
+        CsUser existing = csUserMapper.selectOne(
+                new LambdaQueryWrapper<CsUser>().eq(CsUser::getUserId, userId));
+        if (existing == null) {
             CsUser user = new CsUser();
             user.setUserId(userId);
             user.setNickname("用户" + userId.substring(Math.max(0, userId.length()-6)));
-            csUserRepository.save(user);
+            csUserMapper.insert(user);
         }
         return msg;
     }
 
     public List<Message> getMessages(String userId) {
-        return messageRepository.findByUserIdOrderByCreatedAtAsc(userId);
+        return messageMapper.selectList(
+                new LambdaQueryWrapper<Message>()
+                        .eq(Message::getUserId, userId)
+                        .orderByAsc(Message::getCreatedAt));
     }
 
     public void markAsRead(String userId) {
-        messageRepository.markAsRead(userId);
+        messageMapper.markAsRead(userId);
     }
 
     public List<Map<String, Object>> getUserList(Long agentId) {
         LocalDateTime sixMonthsAgo = LocalDateTime.now().minusMonths(6);
-        List<Object[]> recentUsers = messageRepository.findRecentUserIdsWithPagination(sixMonthsAgo,
-                PageRequest.of(0, 1000));
+        List<Map<String, Object>> recentUsers = messageMapper.findRecentUserIdsWithPagination(sixMonthsAgo, 1000);
 
         Set<String> visibleUsers = new HashSet<>();
         if (agentId != null) {
             visibleUsers.addAll(assignmentService.getUsersForAgent(agentId));
-            // Also include users whose last assigned agent matches this agent (from message history)
-            for (Object[] row : recentUsers) {
-                String uid = (String) row[0];
+            for (Map<String, Object> row : recentUsers) {
+                String uid = (String) row.get("userId");
                 Long assigned = assignmentService.getAssignedAgent(uid);
                 if (assigned != null && assigned.equals(agentId)) {
                     visibleUsers.add(uid);
                 }
             }
         } else {
-            // Admin: see all
-            for (Object[] row : recentUsers) {
-                visibleUsers.add((String) row[0]);
+            for (Map<String, Object> row : recentUsers) {
+                visibleUsers.add((String) row.get("userId"));
             }
         }
 
         List<Map<String, Object>> result = new ArrayList<>();
-        for (Object[] row : recentUsers) {
-            String uid = (String) row[0];
+        for (Map<String, Object> row : recentUsers) {
+            String uid = (String) row.get("userId");
             if (!visibleUsers.contains(uid)) continue;
             Map<String, Object> userInfo = new HashMap<>();
             userInfo.put("userId", uid);
 
-            CsUser user = csUserRepository.findByUserId(uid).orElse(null);
+            CsUser user = csUserMapper.selectOne(
+                    new LambdaQueryWrapper<CsUser>().eq(CsUser::getUserId, uid));
             userInfo.put("nickname", user != null ? user.getNickname() : uid);
             userInfo.put("online", assignmentService.isUserOnline(uid));
 
             long unread = 0;
-            List<Message> msgs = messageRepository.findByUserIdOrderByCreatedAtAsc(uid);
+            List<Message> msgs = messageMapper.selectList(
+                    new LambdaQueryWrapper<Message>()
+                            .eq(Message::getUserId, uid)
+                            .orderByAsc(Message::getCreatedAt));
             for (int i = msgs.size() - 1; i >= 0; i--) {
                 Message m = msgs.get(i);
                 if ("agent".equals(m.getDirection())) break;
@@ -101,7 +106,11 @@ public class MessageService {
             }
             userInfo.put("unread", unread);
 
-            Message lastMsg = messageRepository.findTopByUserIdOrderByCreatedAtDesc(uid);
+            Message lastMsg = messageMapper.selectOne(
+                    new LambdaQueryWrapper<Message>()
+                            .eq(Message::getUserId, uid)
+                            .orderByDesc(Message::getCreatedAt)
+                            .last("LIMIT 1"));
             if (lastMsg != null) {
                 userInfo.put("lastMessage", lastMsg.getContent());
                 userInfo.put("lastTime", lastMsg.getCreatedAt().toString());
@@ -130,6 +139,6 @@ public class MessageService {
     }
 
     public List<Message> getAllMessagesForAdmin() {
-        return messageRepository.findAll();
+        return messageMapper.selectList(null);
     }
 }

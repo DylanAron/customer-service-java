@@ -1,8 +1,9 @@
 package com.customer.websocket;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.customer.entity.Agent;
-import com.customer.repository.AgentRepository;
-import com.customer.repository.MessageRepository;
+import com.customer.repository.AgentMapper;
+import com.customer.repository.MessageMapper;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -12,23 +13,23 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class AgentAssignmentService {
 
-    private final AgentRepository agentRepository;
-    private final MessageRepository messageRepository;
+    private final AgentMapper agentMapper;
+    private final MessageMapper messageMapper;
     private final Map<String, Long> userAgentMap = new ConcurrentHashMap<>();
     private final Map<String, Long> userTodayAgentMap = new ConcurrentHashMap<>();
     private final Map<Long, Set<String>> agentUserMap = new ConcurrentHashMap<>();
 
-    public AgentAssignmentService(AgentRepository agentRepository, MessageRepository messageRepository) {
-        this.agentRepository = agentRepository;
-        this.messageRepository = messageRepository;
+    public AgentAssignmentService(AgentMapper agentMapper, MessageMapper messageMapper) {
+        this.agentMapper = agentMapper;
+        this.messageMapper = messageMapper;
     }
 
     public synchronized Long assignAgent(String userId) {
         // Rule 1: Check if this user talked to any agent today
         if (userTodayAgentMap.containsKey(userId)) {
             Long lastAgentId = userTodayAgentMap.get(userId);
-            Optional<Agent> agentOpt = agentRepository.findById(lastAgentId);
-            if (agentOpt.isPresent() && agentOpt.get().isOnline() && agentOpt.get().isEnabled()) {
+            Agent agent = agentMapper.selectById(lastAgentId);
+            if (agent != null && agent.isOnline() && agent.isEnabled()) {
                 userAgentMap.put(userId, lastAgentId);
                 agentUserMap.computeIfAbsent(lastAgentId, k -> ConcurrentHashMap.newKeySet()).add(userId);
                 return lastAgentId;
@@ -36,7 +37,8 @@ public class AgentAssignmentService {
         }
 
         // Rule 2: Random online agent
-        List<Agent> onlineAgents = agentRepository.findByOnlineTrue();
+        List<Agent> onlineAgents = agentMapper.selectList(
+                new LambdaQueryWrapper<Agent>().eq(Agent::isOnline, true));
         List<Agent> availableAgents = onlineAgents.stream()
                 .filter(Agent::isEnabled)
                 .toList();

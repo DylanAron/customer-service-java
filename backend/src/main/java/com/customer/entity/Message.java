@@ -1,40 +1,39 @@
 package com.customer.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "cs_message")
+@TableName("cs_message")
 public class Message {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(nullable = false, columnDefinition = "VARCHAR(255) COMMENT '用户ID'")
+    @TableField("user_id")
     private String userId;
 
-    @Column(columnDefinition = "BIGINT COMMENT '回复此消息的客服ID'")
+    @TableField("agent_id")
     private Long agentId;
 
-    @Column(nullable = false, columnDefinition = "TEXT COMMENT '消息内容'")
     private String content;
 
-    @Column(columnDefinition = "VARCHAR(50) COMMENT '消息类型：text/image/file'")
+    @TableField("msg_type")
     private String msgType;
 
-    @Column(columnDefinition = "VARCHAR(500) COMMENT '文件URL（图片/文件时使用）'")
+    @TableField("file_url")
     private String fileUrl;
 
-    @Column(name = "channel_code", columnDefinition = "VARCHAR(20) COMMENT '渠道编码：h5/pc/app/...'")
-    private String channelCode;
-
-    @Column(name = "is_read", columnDefinition = "TINYINT(1) DEFAULT 0 COMMENT '是否已读'")
+    @TableField("is_read")
     private Boolean isRead = false;
 
-    @Column(nullable = false, columnDefinition = "VARCHAR(10) COMMENT '消息方向：user=用户发送, agent=客服发送'")
+    @TableField("channel_code")
+    private String channelCode;
+
     private String direction;
 
-    @Column(name = "created_at", columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'")
+    @TableField("created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 
     public Long getId() { return id; }

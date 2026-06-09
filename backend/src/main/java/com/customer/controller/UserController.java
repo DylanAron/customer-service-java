@@ -1,8 +1,9 @@
 package com.customer.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.customer.config.JwtUtil;
 import com.customer.entity.CsUser;
-import com.customer.repository.CsUserRepository;
+import com.customer.repository.CsUserMapper;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -12,11 +13,11 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/user")
 public class UserController {
-    private final CsUserRepository csUserRepository;
+    private final CsUserMapper csUserMapper;
     private final JwtUtil jwtUtil;
 
-    public UserController(CsUserRepository csUserRepository, JwtUtil jwtUtil) {
-        this.csUserRepository = csUserRepository;
+    public UserController(CsUserMapper csUserMapper, JwtUtil jwtUtil) {
+        this.csUserMapper = csUserMapper;
         this.jwtUtil = jwtUtil;
     }
 
@@ -28,12 +29,12 @@ public class UserController {
             return ResponseEntity.badRequest().body(Map.of("error", "用户名和密码不能为空"));
         }
 
-        Optional<CsUser> userOpt = csUserRepository.findByUsername(username);
-        if (userOpt.isEmpty()) {
+        CsUser user = csUserMapper.selectOne(
+                new LambdaQueryWrapper<CsUser>().eq(CsUser::getUsername, username));
+        if (user == null) {
             return ResponseEntity.status(401).body(Map.of("error", "用户不存在"));
         }
 
-        CsUser user = userOpt.get();
         if (!user.getPassword().equals(password)) {
             return ResponseEntity.status(401).body(Map.of("error", "密码错误"));
         }
@@ -57,7 +58,7 @@ public class UserController {
             return ResponseEntity.badRequest().body(Map.of("error", "用户名和密码不能为空"));
         }
 
-        if (csUserRepository.findByUsername(username).isPresent()) {
+        if (csUserMapper.selectOne(new LambdaQueryWrapper<CsUser>().eq(CsUser::getUsername, username)) != null) {
             return ResponseEntity.badRequest().body(Map.of("error", "用户名已存在"));
         }
 
@@ -67,7 +68,7 @@ public class UserController {
         user.setPassword(password);
         user.setNickname(nickname != null ? nickname : username);
 
-        csUserRepository.save(user);
+        csUserMapper.insert(user);
 
         String token = jwtUtil.generateToken(user.getId(), user.getUsername());
         return ResponseEntity.ok(Map.of(
@@ -80,11 +81,11 @@ public class UserController {
 
     @GetMapping("/info")
     public ResponseEntity<?> getInfo(@RequestParam String userId) {
-        Optional<CsUser> userOpt = csUserRepository.findByUserId(userId);
-        if (userOpt.isEmpty()) {
+        CsUser user = csUserMapper.selectOne(
+                new LambdaQueryWrapper<CsUser>().eq(CsUser::getUserId, userId));
+        if (user == null) {
             return ResponseEntity.notFound().build();
         }
-        CsUser user = userOpt.get();
         return ResponseEntity.ok(Map.of(
             "userId", user.getUserId(),
             "username", user.getUsername(),

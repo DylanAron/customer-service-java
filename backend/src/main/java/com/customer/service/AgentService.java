@@ -1,26 +1,28 @@
 package com.customer.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.customer.entity.Agent;
-import com.customer.repository.AgentRepository;
+import com.customer.repository.AgentMapper;
 import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
 
 @Service
 public class AgentService {
-    private final AgentRepository agentRepository;
+    private final AgentMapper agentMapper;
     private final RedisAssignmentService assignmentService;
 
-    public AgentService(AgentRepository agentRepository, RedisAssignmentService assignmentService) {
-        this.agentRepository = agentRepository;
+    public AgentService(AgentMapper agentMapper, RedisAssignmentService assignmentService) {
+        this.agentMapper = agentMapper;
         this.assignmentService = assignmentService;
     }
 
     public Agent login(String username, String password) {
-        Optional<Agent> agentOpt = agentRepository.findByUsername(username);
-        if (agentOpt.isPresent() && agentOpt.get().getPassword().equals(password)) {
-            if (!agentOpt.get().isEnabled()) return null;
-            return agentOpt.get();
+        Agent agent = agentMapper.selectOne(
+                new LambdaQueryWrapper<Agent>().eq(Agent::getUsername, username));
+        if (agent != null && agent.getPassword().equals(password)) {
+            if (!agent.isEnabled()) return null;
+            return agent;
         }
         return null;
     }
@@ -31,34 +33,36 @@ public class AgentService {
         agent.setPassword(password);
         agent.setNickname(nickname != null ? nickname : username);
         agent.setEnabled(true);
-        return agentRepository.save(agent);
+        agentMapper.insert(agent);
+        return agent;
     }
 
     public Agent updateAgent(Long id, String nickname, String password, Boolean enabled) {
-        Optional<Agent> opt = agentRepository.findById(id);
-        if (opt.isPresent()) {
-            Agent agent = opt.get();
+        Agent agent = agentMapper.selectById(id);
+        if (agent != null) {
             if (nickname != null) agent.setNickname(nickname);
             if (password != null) agent.setPassword(password);
             if (enabled != null) agent.setEnabled(enabled);
-            return agentRepository.save(agent);
+            agentMapper.updateById(agent);
+            return agent;
         }
         return null;
     }
 
     public void deleteAgent(Long id) {
-        agentRepository.deleteById(id);
+        agentMapper.deleteById(id);
     }
 
     public List<Agent> getAllAgents() {
-        return agentRepository.findAll();
+        return agentMapper.selectList(null);
     }
 
     public void setOnline(Long id, boolean online) {
-        agentRepository.findById(id).ifPresent(a -> {
-            a.setOnline(online);
-            agentRepository.save(a);
-        });
+        Agent agent = agentMapper.selectById(id);
+        if (agent != null) {
+            agent.setOnline(online);
+            agentMapper.updateById(agent);
+        }
         if (online) {
             assignmentService.markAgentOnline(id);
         } else {
@@ -67,24 +71,27 @@ public class AgentService {
     }
 
     public Optional<Agent> findById(Long id) {
-        return agentRepository.findById(id);
+        return Optional.ofNullable(agentMapper.selectById(id));
     }
 
     public long countOnline() {
-        return agentRepository.countByOnlineTrue();
+        return agentMapper.selectCount(
+                new LambdaQueryWrapper<Agent>().eq(Agent::isOnline, true));
     }
 
     public void updatePassword(Long id, String newPassword) {
-        agentRepository.findById(id).ifPresent(a -> {
-            a.setPassword(newPassword);
-            agentRepository.save(a);
-        });
+        Agent agent = agentMapper.selectById(id);
+        if (agent != null) {
+            agent.setPassword(newPassword);
+            agentMapper.updateById(agent);
+        }
     }
 
     public void updateNickname(Long id, String nickname) {
-        agentRepository.findById(id).ifPresent(a -> {
-            a.setNickname(nickname);
-            agentRepository.save(a);
-        });
+        Agent agent = agentMapper.selectById(id);
+        if (agent != null) {
+            agent.setNickname(nickname);
+            agentMapper.updateById(agent);
+        }
     }
 }
