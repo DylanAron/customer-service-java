@@ -1,0 +1,35 @@
+CREATE TABLE IF NOT EXISTS cs_agent (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    username VARCHAR(255) NOT NULL UNIQUE COMMENT '登录用户名',
+    password VARCHAR(255) NOT NULL COMMENT '登录密码',
+    nickname VARCHAR(255) COMMENT '客服昵称',
+    enabled TINYINT(1) DEFAULT 1 COMMENT '是否启用',
+    online TINYINT(1) DEFAULT 0 COMMENT '是否在线',
+    last_login_time DATETIME COMMENT '最后登录时间',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+) COMMENT='客服账号表';
+
+CREATE TABLE IF NOT EXISTS cs_user (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    user_id VARCHAR(255) NOT NULL UNIQUE COMMENT '用户唯一标识',
+    username VARCHAR(255) UNIQUE COMMENT '用户名',
+    password VARCHAR(255) NOT NULL DEFAULT '123456' COMMENT '登录密码',
+    nickname VARCHAR(255) COMMENT '用户昵称',
+    avatar VARCHAR(500) COMMENT '头像URL',
+    last_active_time DATETIME COMMENT '最后活跃时间',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+) COMMENT='访客用户表';
+
+CREATE TABLE IF NOT EXISTS cs_message (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    user_id VARCHAR(255) NOT NULL COMMENT '用户ID',
+    agent_id BIGINT COMMENT '客服ID',
+    content TEXT NOT NULL COMMENT '消息内容',
+    msg_type VARCHAR(50) COMMENT '消息类型',
+    file_url VARCHAR(500) COMMENT '文件URL',
+    is_read TINYINT(1) DEFAULT 0 COMMENT '是否已读',
+    channel_code VARCHAR(20) COMMENT '渠道编码',
+    direction VARCHAR(10) NOT NULL COMMENT '消息方向',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+) COMMENT='消息记录表';

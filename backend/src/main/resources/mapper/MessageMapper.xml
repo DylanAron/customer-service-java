@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.customer.repository.MessageMapper">
+
+    <select id="findRecentUserIdsWithPagination" resultType="java.util.Map">
+        SELECT m.user_id AS userId, MAX(m.created_at) AS lastMsgTime
+        FROM cs_message m
+        WHERE m.created_at &gt;= #{since}
+        GROUP BY m.user_id
+        ORDER BY lastMsgTime DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="countUnreadForAllUsers" resultType="java.util.Map">
+        SELECT m.user_id AS userId, COUNT(*) AS cnt
+        FROM cs_message m
+        WHERE m.direction = 'user'
+          AND (m.is_read IS NULL OR m.is_read = false)
+          AND m.created_at &gt;= #{since}
+        GROUP BY m.user_id
+    </select>
+
+</mapper>
