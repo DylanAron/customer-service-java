@@ -3,7 +3,7 @@ package com.customer.websocket;
 import com.customer.service.AgentService;
 import com.customer.service.MessageService;
 import com.customer.service.RedisAssignmentService;
-import com.customer.service.RedisSettingService;
+import com.customer.service.SettingService;
 import com.customer.service.RedisWebSocketManager;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
@@ -34,7 +34,7 @@ public class NettyWebSocketServer {
     private final MessageService messageService;
     private final AgentService agentService;
     private final RedisAssignmentService assignmentService;
-    private final RedisSettingService settingService;
+    private final SettingService settingService;
     private final RedisWebSocketManager wsManager;
 
     private EventLoopGroup bossGroup;
@@ -42,7 +42,7 @@ public class NettyWebSocketServer {
 
     public NettyWebSocketServer(MessageService messageService, AgentService agentService,
                                  RedisAssignmentService assignmentService,
-                                 RedisSettingService settingService,
+                                 SettingService settingService,
                                  RedisWebSocketManager wsManager) {
         this.messageService = messageService;
         this.agentService = agentService;

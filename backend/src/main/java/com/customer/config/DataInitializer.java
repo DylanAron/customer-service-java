@@ -67,6 +67,7 @@ public class DataInitializer implements CommandLineRunner {
             {"cs_agent", "客服账号表"},
             {"cs_message", "消息记录表"},
             {"cs_user", "访客用户表"},
+            {"cs_setting", "系统设置表"},
         };
         for (String[] tc : tableComments) {
             jdbcTemplate.execute("ALTER TABLE " + tc[0] + " COMMENT = '" + tc[1] + "'");
@@ -102,6 +103,12 @@ public class DataInitializer implements CommandLineRunner {
             {"cs_user", "avatar", "头像URL"},
             {"cs_user", "last_active_time", "最后活跃时间"},
             {"cs_user", "created_at", "创建时间"},
+
+            {"cs_setting", "id", "主键ID"},
+            {"cs_setting", "setting_key", "设置键名，如 welcome_message"},
+            {"cs_setting", "setting_value", "设置值"},
+            {"cs_setting", "updated_at", "更新时间"},
+            {"cs_setting", "created_at", "创建时间"},
         };
         for (String[] cc : columnComments) {
             try {

@@ -78,4 +78,22 @@ public class AgentController {
         agentService.updateNickname(agentId, req.get("nickname"));
         return ResponseEntity.ok(Map.of("success", true));
     }
+
+    @GetMapping("/profile")
+    public ResponseEntity<?> profile(HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(401).body(Map.of("error", "未授权"));
+        }
+        String token = authHeader.substring(7);
+        Long agentId = jwtUtil.getAgentIdFromToken(token);
+        var opt = agentService.findById(agentId);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        Agent agent = opt.get();
+        return ResponseEntity.ok(Map.of(
+            "agentId", agent.getId(),
+            "username", agent.getUsername(),
+            "nickname", agent.getNickname() != null ? agent.getNickname() : agent.getUsername()
+        ));
+    }
 }

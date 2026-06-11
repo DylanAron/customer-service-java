@@ -34,7 +34,7 @@ mybatis-plus:
   type-aliases-package: com.customer.entity
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+   # log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 websocket:
   port: 9090
@@ -44,6 +44,10 @@ websocket:
 jwt:
   secret: customer-service-secret-key-2024-very-secure
   expiration: 86400000
+
+admin:
+  username: admin
+  password: admin123
 
 # ========== File Storage ==========
 # Default: project-root/filesUpload/  (images/ and files/ sub-directories, daily yyyy/MM/dd)

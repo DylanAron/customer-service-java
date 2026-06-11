@@ -5,6 +5,7 @@
 ## 项目结构
 
 ```
+├── start.sh                     # 生产环境启动/停止/重启脚本（start | stop | restart | status）
 ├── backend/                    # Spring Boot 3.3 后端（Java 21 + Maven）
 │   ├── src/main/java/com/customer/
 │   │   ├── config/             # 配置类（JWT, Redis, CORS, 数据初始化）
@@ -35,6 +36,8 @@
 │   └── frontend.md
 └── uploads/                    # （已废弃）旧文件上传目录
 ```
+## 注释请给中文注释
+
 
 ## 技术栈
 
@@ -61,19 +64,33 @@
 
 ### 启动后端
 
+**开发环境：**
 ```bash
 cd backend
-
-# 开发环境
 mvn spring-boot:run
 # HTTP API → http://localhost:8089
 # WebSocket → ws://localhost:9090
+# （Ctrl+C 停止）
+```
 
-# 生产环境
-mvn spring-boot:run -Dspring.profiles.active=prod
-# HTTP API → http://localhost:8080
+**生产环境：**
+```bash
+# 方式一：start.sh（推荐）
+./start.sh            # 自动打包 + 启动（默认 prod 环境）
+./start.sh stop       # 优雅停止
+./start.sh restart    # 重启
+./start.sh status     # 查看状态
 
-# 正常停止（Ctrl+C）：Spring Boot 优雅关闭 + Netty 自动释放端口
+# 方式二：直接 JAR
+cd backend
+mvn clean package -DskipTests -Dskip.npm -Dskip.installnodenpm
+java -jar target/customer-service.jar --spring.profiles.active=prod
+
+# 日志目录：项目根目录的 logs/
+#   logs/console.log  启动日志
+#   logs/info.log      应用日志（按天滚动，保留 30 天）
+#   logs/error.log     错误日志（按天滚动，保留 60 天）
+#   logs/gc.log        GC 日志
 ```
 
 ### 启动前端
@@ -203,10 +220,22 @@ storage:
 ### 后端
 
 ```bash
-mvn spring-boot:run                           # 开发启动
-mvn spring-boot:run -Dspring.profiles.active=prod  # 生产启动
-mvn clean compile -DskipTests                 # 仅编译
-mvn clean install -DskipTests                 # 打包
+# 开发
+mvn spring-boot:run                              # 启动（Ctrl+C 停止）
+mvn clean compile                                # 仅编译
+
+# 生产构建
+mvn clean package -DskipTests -Dskip.npm -Dskip.installnodenpm  # 打包（跳过前端）
+
+# 生产部署
+./start.sh                                       # 启动
+./start.sh stop                                  # 停止
+./start.sh restart                               # 重启
+./start.sh status                                # 状态
+
+# 环境变量
+SPRING_PROFILE=dev ./start.sh                    # 使用开发环境启动
+JAVA_OPTS="-Xms1g -Xmx2g" ./start.sh             # 自定义 JVM 参数
 ```
 
 ### 前端

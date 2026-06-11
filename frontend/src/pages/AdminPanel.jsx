@@ -23,10 +23,13 @@ export default function AdminPanel() {
   const [users, setUsers] = useState([])
   const [selectedUser, setSelectedUser] = useState(null)
   const [userMessages, setUserMessages] = useState([])
-  // Settings
-  const [welcomeMessage, setWelcomeMessage] = useState('')
-  const [autoReplyMessage, setAutoReplyMessage] = useState('')
+  // 设置
+  const [welcomeHtml, setWelcomeHtml] = useState('')
+  const [autoReplyHtml, setAutoReplyHtml] = useState('')
   const [settingsSaved, setSettingsSaved] = useState(false)
+  const welcomeRef = useRef(null)
+  const autoReplyRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     if (!token) { navigate('/admin/login'); return }
@@ -38,16 +41,37 @@ export default function AdminPanel() {
   async function loadSettings() {
     try {
       const data = await request('/api/settings')
-      setWelcomeMessage(data.welcome_message || '')
-      setAutoReplyMessage(data.auto_reply_message || '')
+      if (data.welcome_message) setWelcomeHtml(data.welcome_message)
+      if (data.auto_reply_message) setAutoReplyHtml(data.auto_reply_message)
+      // 重置加载标记，让下次切到 settings tab 时重新填入
+      if (welcomeRef.current) welcomeRef.current.__loaded = false
+      if (autoReplyRef.current) autoReplyRef.current.__loaded = false
     } catch {}
   }
 
+  // 数据加载后填入 contentEditable（在 tab 切换到 settings 时也要触发）
+  useEffect(() => {
+    if (tab !== 'settings') return
+    if (welcomeRef.current && welcomeHtml && !welcomeRef.current.__loaded) {
+      welcomeRef.current.innerHTML = welcomeHtml
+      welcomeRef.current.__loaded = true
+    }
+  }, [welcomeHtml, tab])
+  useEffect(() => {
+    if (tab !== 'settings') return
+    if (autoReplyRef.current && autoReplyHtml && !autoReplyRef.current.__loaded) {
+      autoReplyRef.current.innerHTML = autoReplyHtml
+      autoReplyRef.current.__loaded = true
+    }
+  }, [autoReplyHtml, tab])
+
   async function saveSettings() {
+    const h1 = welcomeRef.current?.innerHTML || ''
+    const h2 = autoReplyRef.current?.innerHTML || ''
     try {
       await request('/api/settings', {
         method: 'PUT',
-        body: JSON.stringify({ welcome_message: welcomeMessage, auto_reply_message: autoReplyMessage })
+        body: JSON.stringify({ welcome_message: h1, auto_reply_message: h2 })
       })
       setSettingsSaved(true)
       setTimeout(() => setSettingsSaved(false), 2000)
@@ -57,11 +81,9 @@ export default function AdminPanel() {
   async function loadAgents() {
     try { const data = await request('/api/agent/list'); setAgents(data) } catch {}
   }
-
   async function loadUsers() {
     try { const data = await request('/api/message/users?page=0&size=1000'); setUsers(data) } catch {}
   }
-
   async function addAgent() {
     if (!newUsername || !newPassword) return
     try {
@@ -69,33 +91,84 @@ export default function AdminPanel() {
       setShowAdd(false); setNewUsername(''); setNewPassword(''); setNewNickname(''); loadAgents()
     } catch {}
   }
-
   async function updateAgent(id) {
     try {
       await request('/api/agent/update/' + id, { method: 'PUT', body: JSON.stringify({ nickname: editNickname, password: editPassword }) })
       setEditAgent(null); loadAgents()
     } catch {}
   }
-
   async function toggleAgent(id, current) {
     try {
       await request('/api/agent/update/' + id, { method: 'PUT', body: JSON.stringify({ enabled: String(!current) }) })
       loadAgents()
     } catch {}
   }
-
   async function deleteAgent(id) {
     if (!confirm('确定删除此客服？')) return
     try { await request('/api/agent/delete/' + id, { method: 'DELETE' }); loadAgents() } catch {}
   }
-
   async function loadUserMessages(userId) {
     setSelectedUser(userId)
     try { const data = await request('/api/message/history/' + userId); setUserMessages(data) } catch {}
   }
-
   function handleLogout() {
     localStorage.removeItem('token'); localStorage.removeItem('role'); navigate('/admin/login')
+  }
+
+  function onAction(action, value) {
+    // 选择当前活跃的编辑器
+    const sel = window.getSelection()
+    let editor = null
+    if (sel && sel.rangeCount > 0) {
+      const node = sel.getRangeAt(0).startContainer
+      if (welcomeRef.current?.contains(node)) editor = welcomeRef.current
+      else if (autoReplyRef.current?.contains(node)) editor = autoReplyRef.current
+    }
+    if (!editor) editor = welcomeRef.current
+    if (!editor) return
+    editor.focus()
+    if (action === 'insertImageUrl') {
+      const url = prompt('请输入图片链接')
+      if (url) document.execCommand('insertImage', false, url)
+    } else if (action === 'uploadImage') {
+      fileInputRef.current.value = ''
+      fileInputRef.current.onchange = () => {
+        const file = fileInputRef.current.files?.[0]
+        if (!file || !file.type.startsWith('image/')) return
+        const fd = new FormData()
+        fd.append('file', file)
+        editor.focus()
+        request('/api/message/upload', { method: 'POST', body: fd }).then(data => {
+          if (data.url) document.execCommand('insertImage', false, data.url)
+        }).catch(() => {})
+        fileInputRef.current.value = ''
+      }
+      fileInputRef.current.click()
+    } else {
+      document.execCommand(action, false, value || null)
+    }
+    editor.focus()
+  }
+
+  function Toolbar() {
+    return (
+      <div style={styles.toolbar}>
+        <button type="button" style={styles.tbBtn} onMouseDown={e => { e.preventDefault(); onAction('bold') }} title="加粗"><b>B</b></button>
+        <button type="button" style={styles.tbBtn} onMouseDown={e => { e.preventDefault(); onAction('italic') }} title="斜体"><i>I</i></button>
+        <button type="button" style={styles.tbBtn} onMouseDown={e => { e.preventDefault(); onAction('underline') }} title="下划线"><u>U</u></button>
+        <button type="button" style={styles.tbBtn} onMouseDown={e => { e.preventDefault(); onAction('strikeThrough') }} title="删除线"><s>S</s></button>
+        <span style={{ width: 1, height: 20, background: '#ddd', margin: '0 4px' }} />
+        <button type="button" style={styles.tbBtn} onMouseDown={e => { e.preventDefault(); onAction('insertUnorderedList') }} title="无序列表">•</button>
+        <button type="button" style={styles.tbBtn} onMouseDown={e => { e.preventDefault(); onAction('insertOrderedList') }} title="有序列表">1.</button>
+        <span style={{ width: 1, height: 20, background: '#ddd', margin: '0 4px' }} />
+        <button type="button" style={styles.tbBtn} onMouseDown={e => { e.preventDefault(); onAction('formatBlock', '<h1>') }} title="标题1">H1</button>
+        <button type="button" style={styles.tbBtn} onMouseDown={e => { e.preventDefault(); onAction('formatBlock', '<h2>') }} title="标题2">H2</button>
+        <button type="button" style={styles.tbBtn} onMouseDown={e => { e.preventDefault(); onAction('formatBlock', '<h3>') }} title="标题3">H3</button>
+        <span style={{ width: 1, height: 20, background: '#ddd', margin: '0 4px' }} />
+        <button type="button" style={styles.tbBtn} onMouseDown={e => { e.preventDefault(); onAction('insertImageUrl') }} title="插入图片链接">🖼</button>
+        <button type="button" style={styles.tbBtn} onMouseDown={e => { e.preventDefault(); onAction('uploadImage') }} title="上传图片">⬆</button>
+      </div>
+    )
   }
 
   return (
@@ -111,7 +184,7 @@ export default function AdminPanel() {
       </div>
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        {/* Tab: 客服管理 */}
+        {/* === 客服管理 Tab === */}
         {tab === 'agents' && (
           <div style={{ flex: 1, padding: 24, overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -119,12 +192,10 @@ export default function AdminPanel() {
               <button onClick={() => setShowAdd(true)} style={primaryBtn}>新增客服</button>
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', borderRadius: 8, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }}>
-              <thead>
-                <tr style={{ background: '#F5F5F5' }}>
-                  <th style={thStyle}>ID</th><th style={thStyle}>用户名</th><th style={thStyle}>昵称</th>
-                  <th style={thStyle}>状态</th><th style={thStyle}>在线</th><th style={thStyle}>操作</th>
-                </tr>
-              </thead>
+              <thead><tr style={{ background: '#F5F5F5' }}>
+                <th style={thStyle}>ID</th><th style={thStyle}>用户名</th><th style={thStyle}>昵称</th>
+                <th style={thStyle}>状态</th><th style={thStyle}>在线</th><th style={thStyle}>操作</th>
+              </tr></thead>
               <tbody>
                 {agents.filter(a => a.username !== 'admin').map(a => (
                   <tr key={a.id} style={{ borderBottom: '1px solid #F0F0F0' }}>
@@ -169,7 +240,7 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* Tab: 自动回复设置 */}
+        {/* === 自动回复设置 Tab === */}
         {tab === 'settings' && (
           <div style={{ flex: 1, padding: 24, overflowY: 'auto', maxWidth: 700 }}>
             <h3 style={{ marginBottom: 6, fontSize: 16 }}>自动回复设置</h3>
@@ -180,26 +251,28 @@ export default function AdminPanel() {
             <div style={{ marginBottom: 24 }}>
               <label style={{ fontSize: 14, fontWeight: 600, color: '#333', display: 'block', marginBottom: 8 }}>
                 欢迎语
-                <span style={{ fontSize: 12, color: '#999', fontWeight: 400, marginLeft: 8 }}>用户5分钟内重复进入时自动发送</span>
+                <span style={{ fontSize: 12, color: '#999', fontWeight: 400, marginLeft: 8 }}>用户进入聊天时自动发送（支持富文本）</span>
               </label>
-              <textarea
-                value={welcomeMessage}
-                onChange={e => setWelcomeMessage(e.target.value)}
-                style={{ ...textAreaStyle, minHeight: 80 }}
-                placeholder="请输入欢迎语..."
+              <Toolbar />
+              <div
+                ref={welcomeRef}
+                contentEditable
+                suppressContentEditableWarning
+                style={styles.editor}
               />
             </div>
 
             <div style={{ marginBottom: 24 }}>
               <label style={{ fontSize: 14, fontWeight: 600, color: '#333', display: 'block', marginBottom: 8 }}>
                 离线自动回复
-                <span style={{ fontSize: 12, color: '#999', fontWeight: 400, marginLeft: 8 }}>无在线客服时，用户发送消息自动回复此内容</span>
+                <span style={{ fontSize: 12, color: '#999', fontWeight: 400, marginLeft: 8 }}>无在线客服时，用户发送消息自动回复此内容（支持富文本）</span>
               </label>
-              <textarea
-                value={autoReplyMessage}
-                onChange={e => setAutoReplyMessage(e.target.value)}
-                style={{ ...textAreaStyle, minHeight: 100 }}
-                placeholder="请输入自动回复内容..."
+              <Toolbar />
+              <div
+                ref={autoReplyRef}
+                contentEditable
+                suppressContentEditableWarning
+                style={styles.editor}
               />
             </div>
 
@@ -210,7 +283,7 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* Tab: 聊天记录 */}
+        {/* === 聊天记录 Tab === */}
         {tab === 'history' && (
           <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
             <div style={{ width: 280, borderRight: '1px solid #E0E0E0', overflowY: 'auto', background: '#FAFAFA' }}>
@@ -242,7 +315,7 @@ export default function AdminPanel() {
                           ) : msg.msgType === 'file' ? (
                             <div><span>📎</span><a href={'' + msg.fileUrl} target="_blank" rel="noreferrer" style={{ color: '#4A90D9', marginLeft: 4 }}>{msg.content}</a></div>
                           ) : (
-                            <span style={{whiteSpace: 'pre-wrap'}}>{msg.content}</span>
+                            <span dangerouslySetInnerHTML={{ __html: msg.content }} />
                           )}
                           <div style={{ fontSize: 11, color: '#999', marginTop: 4, textAlign: 'right' }}>{formatTime(msg.createdAt)}</div>
                         </div>
@@ -255,10 +328,14 @@ export default function AdminPanel() {
           </div>
         )}
       </div>
+
+      {/* 隐藏的文件上传 input */}
+      <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} />
     </div>
   )
 }
 
+/* ============ 样式 ============ */
 const primaryBtn = { padding: '8px 20px', background: '#4A90D9', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 14 }
 const thStyle = { padding: '12px 16px', textAlign: 'left', fontSize: 13, color: '#666', fontWeight: 600 }
 const tdStyle = { padding: '10px 16px', fontSize: 14 }
@@ -268,7 +345,30 @@ const smGreenBtn = { padding: '4px 10px', background: '#E8F5E9', color: '#2E7D32
 const smOrangeBtn = { padding: '4px 10px', background: '#FFF3E0', color: '#E65100', border: '1px solid #FFE0B2', borderRadius: 3, cursor: 'pointer', fontSize: 12 }
 const smRedBtn = { padding: '4px 10px', background: '#FFEBEE', color: '#C62828', border: '1px solid #FFCDD2', borderRadius: 3, cursor: 'pointer', fontSize: 12 }
 const smGrayBtn = { padding: '4px 10px', background: '#F5F5F5', color: '#666', border: '1px solid #ddd', borderRadius: 3, cursor: 'pointer', fontSize: 12 }
-const textAreaStyle = { width: '100%', padding: '12px 14px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, outline: 'none', resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.6, fontFamily: 'inherit' }
+
+const styles = {
+  toolbar: {
+    display: 'flex', gap: 4, padding: '6px 8px',
+    background: '#f5f5f5', border: '1px solid #ddd',
+    borderBottom: 'none', borderRadius: '8px 8px 0 0',
+    flexWrap: 'wrap', alignItems: 'center',
+  },
+  tbBtn: {
+    padding: '2px 10px', border: '1px solid #ccc',
+    borderRadius: 4, background: '#fff', cursor: 'pointer',
+    fontSize: 13, minWidth: 30, userSelect: 'none',
+  },
+  editor: {
+    width: '100%', minHeight: 100, padding: '12px 14px',
+    border: '1px solid #ddd', borderRadius: '0 0 8px 8px',
+    borderTop: 'none',
+    fontSize: 14, outline: 'none', boxSizing: 'border-box',
+    lineHeight: 1.6, fontFamily: 'inherit',
+    background: '#fff', overflowY: 'auto',
+    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+    overflowWrap: 'break-word', cursor: 'text', color: '#333',
+  },
+}
 
 function tabBtnStyle(active) {
   return { padding: '6px 16px', background: active ? 'rgba(255,255,255,0.15)' : 'transparent', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 14 }

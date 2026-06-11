@@ -13,6 +13,7 @@ export default function AgentPanel() {
   const token = localStorage.getItem('token')
   const agentId = localStorage.getItem('agentId')
   const nickname = localStorage.getItem('nickname') || '客服'
+  const username = localStorage.getItem('username') || ''
 
   const [users, setUsers] = useState([])
   const [selectedUser, setSelectedUser] = useState(null)
@@ -26,17 +27,39 @@ export default function AgentPanel() {
   const [newNickname, setNewNickname] = useState('')
   const [newPassword, setNewPassword] = useState('')
 
+  // 当前显示的昵称（state，使修改后实时更新），优先从 API 获取
+  const [displayNickname, setDisplayNickname] = useState('客服')
+
   const wsRef = useRef(null)
   const messagesEndRef = useRef(null)
   const userListRef = useRef(null)
   const selectedUserRef = useRef(null)
+  const pingTimerRef = useRef(null)
 
   useEffect(() => {
     if (!token) { navigate('/agent/login'); return }
+    refreshProfile()
     connectAgentWs()
     loadUsers(0)
-    return () => { wsRef.current?.close() }
+    return () => {
+      clearInterval(pingTimerRef.current)
+      wsRef.current?.close()
+    }
   }, [])
+
+  /** 从服务端同步最新客服资料（nickname 可能被管理员修改过） */
+  async function refreshProfile() {
+    try {
+      const data = await request('/api/agent/profile')
+      if (data.nickname) {
+        localStorage.setItem('nickname', data.nickname)
+        setDisplayNickname(data.nickname)
+      }
+      if (data.username) {
+        localStorage.setItem('username', data.username)
+      }
+    } catch {}
+  }
 
   function connectAgentWs() {
     const ws = connectWebSocket('/ws/agent/' + agentId,
@@ -64,8 +87,18 @@ export default function AgentPanel() {
           loadUsers(0)
         }
       },
-      () => setConnected(true),
-      () => setConnected(false)
+      () => {
+        setConnected(true)
+        // 开始心跳：每 60 秒发一次 ping，刷新 Redis 在线 TTL
+        clearInterval(pingTimerRef.current)
+        pingTimerRef.current = setInterval(() => {
+          ws?.send(JSON.stringify({ type: 'ping' }))
+        }, 60000)
+      },
+      () => {
+        setConnected(false)
+        clearInterval(pingTimerRef.current)
+      }
     )
     wsRef.current = ws
   }
@@ -97,8 +130,8 @@ export default function AgentPanel() {
       const data = await request('/api/message/history/' + userId + '?agentId=' + agentId)
       setMessages(data)
       scrollToBottom()
-      // Mark as read
-      await request('/api/message/mark-read/' + userId + '?agentId=' + agentId, { method: 'POST' })
+      // Mark as read — 去掉 agentId 参数，标记该用户的所有消息为已读
+      await request('/api/message/mark-read/' + userId, { method: 'POST' })
       loadUsers(0)
     } catch {}
   }
@@ -106,12 +139,6 @@ export default function AgentPanel() {
   function sendMessage() {
     if (!input.trim() || !selectedUser) return
     const msg = { type: 'agent_message', userId: selectedUser, content: input.trim(), msgType: 'text' }
-    const localMsg = {
-      type: 'agent_message', userId: selectedUser, content: input.trim(), msgType: 'text',
-      direction: 'agent', timestamp: new Date().toISOString(), _local: true,
-    }
-    setMessages(prev => [...prev, localMsg])
-    scrollToBottom()
     wsRef.current?.send(JSON.stringify(msg))
     setInput('')
   }
@@ -125,13 +152,6 @@ export default function AgentPanel() {
       const data = await request('/api/message/upload', { method: 'POST', body: fd })
       if (data.url) {
         const isImage = file.type.startsWith('image/')
-        const localMsg = {
-          type: 'agent_message', userId: selectedUser, content: file.name,
-          msgType: isImage ? 'image' : 'file', fileUrl: data.url,
-          direction: 'agent', timestamp: new Date().toISOString(), _local: true,
-        }
-        setMessages(prev => [...prev, localMsg])
-        scrollToBottom()
         wsRef.current?.send(JSON.stringify({ type: 'agent_message', userId: selectedUser, content: file.name, msgType: isImage ? 'image' : 'file', fileUrl: data.url }))
       }
     } catch {}
@@ -152,6 +172,7 @@ export default function AgentPanel() {
       if (newNickname) {
         await request('/api/agent/nickname', { method: 'PUT', body: JSON.stringify({ nickname: newNickname }) })
         localStorage.setItem('nickname', newNickname)
+        setDisplayNickname(newNickname)
       }
       if (newPassword) {
         await request('/api/agent/password', { method: 'PUT', body: JSON.stringify({ password: newPassword }) })
@@ -166,6 +187,7 @@ export default function AgentPanel() {
     localStorage.removeItem('token')
     localStorage.removeItem('agentId')
     localStorage.removeItem('nickname')
+    localStorage.removeItem('username')
     navigate('/agent/login')
   }
 
@@ -181,11 +203,11 @@ export default function AgentPanel() {
       <div style={{ width: 320, borderRight: '1px solid #E0E0E0', display: 'flex', flexDirection: 'column', background: '#F8F9FA' }}>
         <div style={{ padding: '16px', borderBottom: '1px solid #E0E0E0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <span style={{ fontSize: 16, fontWeight: 600 }}>{nickname}</span>
+            <span style={{ fontSize: 16, fontWeight: 600 }}>{displayNickname}</span>
             <span style={{ ...statusDot, background: connected ? '#4CAF50' : '#999', marginLeft: 8 }} />
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button style={smallBtn} onClick={() => setShowProfile(true)}>设置</button>
+            <button style={smallBtn} onClick={() => { setShowProfile(true); setNewNickname(displayNickname === '客服' ? '' : displayNickname) }}>设置</button>
             <button style={smallBtn} onClick={handleLogout}>退出</button>
           </div>
         </div>
@@ -249,7 +271,7 @@ export default function AgentPanel() {
                     ) : msg.msgType === 'file' ? (
                       <div><span>📎</span><a href={'' + msg.fileUrl} target="_blank" rel="noreferrer" style={{ color: msg.direction === 'user' ? '#4A90D9' : '#fff', marginLeft: 4 }}>{msg.content}</a></div>
                     ) : (
-                      <span style={{whiteSpace: 'pre-wrap'}}>{msg.content}</span>
+                      <span dangerouslySetInnerHTML={{ __html: msg.content }} />
                     )}
                     <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4, textAlign: 'right' }}>
                       {formatTime(msg.timestamp || msg.createdAt)}
@@ -280,6 +302,10 @@ export default function AgentPanel() {
         <div style={modalOverlay}>
           <div style={modalBox}>
             <h3 style={{ marginBottom: 16 }}>个人设置</h3>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 13, color: '#666', display: 'block', marginBottom: 4 }}>用户名（不可修改）</label>
+              <input style={{...modalInput, background: '#f5f5f5', color: '#999'}} value={username} disabled />
+            </div>
             <div style={{ marginBottom: 12 }}>
               <label style={{ fontSize: 13, color: '#666', display: 'block', marginBottom: 4 }}>修改昵称</label>
               <input style={modalInput} value={newNickname} onChange={e => setNewNickname(e.target.value)} placeholder="新昵称" />

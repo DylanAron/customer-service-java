@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.annotation.PostConstruct;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -63,8 +64,9 @@ public class LocalFileStorageService implements FileStorageService {
     @PostConstruct
     public void init() {
         if (basePath == null || basePath.isBlank()) {
-            // Default: project-root/filesUpload/
-            basePath = Paths.get(System.getProperty("user.dir")).getParent().resolve("filesUpload").toString();
+            // 默认：JAR 包所在目录下的 filesUpload/
+            String jarDir = System.getProperty("user.dir");
+            basePath = jarDir + File.separator + "filesUpload";
         }
         storageRoot = Paths.get(basePath).normalize().toAbsolutePath();
         try {

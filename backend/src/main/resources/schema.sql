@@ -33,3 +33,11 @@ CREATE TABLE IF NOT EXISTS cs_message (
     direction VARCHAR(10) NOT NULL COMMENT '消息方向',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
 ) COMMENT='消息记录表';
+
+CREATE TABLE IF NOT EXISTS cs_setting (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    setting_key VARCHAR(100) NOT NULL UNIQUE COMMENT '设置键名，如 welcome_message / auto_reply_message',
+    setting_value TEXT COMMENT '设置值',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+) COMMENT='系统设置表（欢迎语、自动回复等）';

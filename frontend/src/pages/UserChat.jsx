@@ -61,6 +61,7 @@ export default function UserChat() {
   const wsRef = useRef(null)
   const fileInputRef = useRef(null)
   const inputRef = useRef(null)
+  const pingTimerRef = useRef(null)
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
@@ -87,16 +88,36 @@ export default function UserChat() {
           scrollToBottom()
         } else if (msg.type === 'welcome_message') {
           // 欢迎语只追加到前端显示，不保存到数据库
+          // 过滤纯空白内容（如 contentEditable 保存的 <p></p> 或 空字符串）
+          console.log('welcome_message received:', msg.content)
+          const text = (msg.content || '').replace(/<[^>]*>/g, '').trim()
+          if (!text) {
+            console.log('welcome_message filtered out (empty after strip)')
+            return
+          }
           const welcomeMsg = { type: 'agent_message', content: msg.content, direction: 'agent', msgType: 'text', _welcome: true }
           setMessages(prev => [...prev, welcomeMsg])
           scrollToBottom()
         }
       },
-      () => { setConnected(true) },
-      () => { setConnected(false) }
+      () => {
+        setConnected(true)
+        // 用户端心跳：每 60 秒刷新 Redis 在线 TTL
+        clearInterval(pingTimerRef.current)
+        pingTimerRef.current = setInterval(() => {
+          ws?.send(JSON.stringify({ type: 'ping' }))
+        }, 60000)
+      },
+      () => {
+        setConnected(false)
+        clearInterval(pingTimerRef.current)
+      }
     )
     wsRef.current = ws
-    return () => { ws.close() }
+    return () => {
+      clearInterval(pingTimerRef.current)
+      ws.close()
+    }
   }, [userId, scrollToBottom])
 
   useEffect(() => { scrollToBottom() }, [messages, scrollToBottom])
@@ -104,18 +125,6 @@ export default function UserChat() {
   function sendMessage() {
     if (!input.trim()) return
     const msg = { type: 'user_message', content: input.trim(), msgType: 'text', channelCode: getChannelCode() }
-    // Add locally for instant display
-    const localMsg = {
-      type: 'user_message',
-      content: input.trim(),
-      msgType: 'text',
-      direction: 'user',
-      timestamp: new Date().toISOString(),
-      channelCode: getChannelCode(),
-      _local: true,
-    }
-    setMessages(prev => [...prev, localMsg])
-    scrollToBottom()
     wsRef.current?.send(JSON.stringify(msg))
     setInput('')
     inputRef.current?.focus()
@@ -128,17 +137,6 @@ export default function UserChat() {
     request('/api/message/upload', { method: 'POST', body: formData }).then(data => {
       if (data.url) {
         const isImage = file.type.startsWith('image/')
-        const localMsg = {
-          type: 'user_message',
-          content: file.name,
-          msgType: isImage ? 'image' : 'file',
-          fileUrl: data.url,
-          direction: 'user',
-          timestamp: new Date().toISOString(),
-          _local: true,
-        }
-        setMessages(prev => [...prev, localMsg])
-        scrollToBottom()
         wsRef.current?.send(JSON.stringify({ type: 'user_message', content: file.name, msgType: isImage ? 'image' : 'file', fileUrl: data.url, channelCode: getChannelCode() }))
       }
     }).catch(() => {})
@@ -160,6 +158,9 @@ export default function UserChat() {
 
   return (
     <div style={styles.container}>
+      {/* Notch / Status Bar */}
+      <div style={styles.notchBar} />
+
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerInner}>
@@ -232,7 +233,7 @@ export default function UserChat() {
                             </div>
                           ) : <span>{msg.content}</span>
                         ) : (
-                          <span style={styles.msgText}>{msg.content}</span>
+                          <span style={styles.msgText} dangerouslySetInnerHTML={{ __html: msg.content }} />
                         )}
                       </div>
                     </div>
@@ -313,6 +314,13 @@ const styles = {
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif',
     maxWidth: '100%',
     margin: '0 auto',
+  },
+
+  // Notch / Status Bar
+  notchBar: {
+    height: 'env(safe-area-inset-top, 0px)',
+    background: '#FFFFFF',
+    flexShrink: 0,
   },
 
   // Header

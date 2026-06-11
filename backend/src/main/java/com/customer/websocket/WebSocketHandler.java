@@ -5,11 +5,11 @@ import com.customer.constant.WsMsgType;
 import com.customer.entity.Agent;
 import com.customer.entity.Message;
 import com.customer.service.*;
-import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
+import io.netty.util.AttributeKey;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -18,19 +18,25 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketFrame> {
 
     private static final ObjectMapper mapper = new ObjectMapper();
+    private static final Logger log = LoggerFactory.getLogger(WebSocketHandler.class);
+    /** 每个 WebSocket 连接只发送一次自动回复 */
+    private static final AttributeKey<Boolean> AUTO_REPLIED = AttributeKey.valueOf("autoReplied");
     private final MessageService messageService;
     private final RedisAssignmentService assignmentService;
     private final AgentService agentService;
-    private final RedisSettingService settingService;
+    private final SettingService settingService;
     private final RedisWebSocketManager wsManager;
 
     public WebSocketHandler(MessageService messageService,
                             RedisAssignmentService assignmentService,
                             AgentService agentService,
-                            RedisSettingService settingService,
+                            SettingService settingService,
                             RedisWebSocketManager wsManager) {
         this.messageService = messageService;
         this.assignmentService = assignmentService;
@@ -51,27 +57,38 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
                 String userId = uri.substring(ApiConst.WS_USER_PREFIX.length());
                 wsManager.registerUser(userId, ctx.channel());
 
-                // 欢迎语（不存数据库）
-                if (!assignmentService.hasRecentVisit(userId)) {
-                    String welcomeMsg = settingService.getWelcomeMessage();
-                    sendToUserWithContent(userId, WsMsgType.WELCOME_MESSAGE, welcomeMsg);
-                }
+                // 每次建立 WebSocket 连接都发送欢迎语
+                String welcomeMsg = settingService.getWelcomeMessage();
+                ObjectNode welcome = mapper.createObjectNode();
+                welcome.put("type", WsMsgType.WELCOME_MESSAGE);
+                welcome.put("content", welcomeMsg);
+                ctx.writeAndFlush(new TextWebSocketFrame(welcome.toString()));
                 assignmentService.touchUserLastVisit(userId);
 
                 Long agentId = assignmentService.assignAgent(userId);
                 if (agentId != null) {
-                    sendToUser(userId, WsMsgType.SYSTEM, "agent_assigned", String.valueOf(agentId));
+                    ObjectNode assignedMsg = mapper.createObjectNode();
+                    assignedMsg.put("type", WsMsgType.SYSTEM);
+                    assignedMsg.put("agent_assigned", String.valueOf(agentId));
+                    ctx.writeAndFlush(new TextWebSocketFrame(assignedMsg.toString()));
                     notifyAgentNewUser(agentId, userId);
-                    sendAssignedGreeting(userId, agentId);
+                    sendAssignedGreeting(ctx, userId, agentId);
                 } else {
-                    sendToUser(userId, WsMsgType.SYSTEM, "no_agent",
-                            "当前没有在线客服，您可留言，我们会尽快回复您");
+                    ObjectNode noAgentMsg = mapper.createObjectNode();
+                    noAgentMsg.put("type", WsMsgType.SYSTEM);
+                    noAgentMsg.put("no_agent", "当前没有在线客服，您可留言，我们会尽快回复您");
+                    ctx.writeAndFlush(new TextWebSocketFrame(noAgentMsg.toString()));
                 }
             } else if (uri != null && uri.startsWith(ApiConst.WS_AGENT_PREFIX)) {
                 Long agentId = Long.parseLong(uri.substring(ApiConst.WS_AGENT_PREFIX.length()));
                 wsManager.registerAgent(agentId, ctx.channel());
                 if (agentService != null) {
                     agentService.setOnline(agentId, true);
+                }
+                // 上线时领取最多 3 个无人认领的用户
+                int claimed = assignmentService.assignPendingUsers(agentId, 3);
+                if (claimed > 0) {
+                    log.info("Agent {} online, claimed {} pending user(s)", agentId, claimed);
                 }
             }
         }
@@ -89,6 +106,17 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
             } else if (WsMsgType.AGENT_MESSAGE.equals(type)) {
                 handleAgentMessage(ctx, json, channelId);
             } else if (WsMsgType.PING.equals(type)) {
+                // 刷新在线状态 TTL（保持活跃）
+                String cid = ctx.channel().id().asShortText();
+                String userId = wsManager.getUserIdByChannel(cid);
+                if (userId != null) {
+                    assignmentService.refreshUserOnline(userId);
+                } else {
+                    Long agentId = wsManager.getAgentIdByChannel(cid);
+                    if (agentId != null) {
+                        assignmentService.refreshAgentOnline(agentId);
+                    }
+                }
                 ctx.writeAndFlush(new TextWebSocketFrame("{\"type\":\"pong\"}"));
             }
         } catch (Exception e) {
@@ -132,27 +160,29 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
                 // Newly assigned → notify agent and send greeting
                 if (wasNewlyAssigned) {
                     notifyAgentNewUser(assignedAgent, userId);
-                    sendAssignedGreeting(userId, assignedAgent);
+                    sendAssignedGreeting(ctx, userId, assignedAgent);
                 }
 
+                // Forward to agent (broadcast to all tabs if local)
                 if (wsManager.hasAgentLocally(assignedAgent)) {
-                    wsManager.getAgentChannel(assignedAgent)
-                            .writeAndFlush(new TextWebSocketFrame(response.toString()));
+                    wsManager.publishUserMessage(assignedAgent, response.toString());
                 } else {
                     wsManager.publishUserMessage(assignedAgent, response.toString());
                 }
             } else {
-                // No online agent: auto-reply only, no agent to forward to
-                String autoReply = settingService.getAutoReplyMessage();
-                ObjectNode replyMsg = mapper.createObjectNode();
-                replyMsg.put("type", WsMsgType.AGENT_MESSAGE);
-                replyMsg.put("userId", userId);
-                replyMsg.put("content", autoReply);
-                replyMsg.put("msgType", "text");
-                replyMsg.put("direction", "agent");
-                replyMsg.put("timestamp",
-                        LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-                ctx.writeAndFlush(new TextWebSocketFrame(replyMsg.toString()));
+                // No online agent: auto-reply only, once per connection
+                if (ctx.channel().attr(AUTO_REPLIED).compareAndSet(null, Boolean.TRUE)) {
+                    String autoReply = settingService.getAutoReplyMessage();
+                    ObjectNode replyMsg = mapper.createObjectNode();
+                    replyMsg.put("type", WsMsgType.AGENT_MESSAGE);
+                    replyMsg.put("userId", userId);
+                    replyMsg.put("content", autoReply);
+                    replyMsg.put("msgType", "text");
+                    replyMsg.put("direction", "agent");
+                    replyMsg.put("timestamp",
+                            LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+                    ctx.writeAndFlush(new TextWebSocketFrame(replyMsg.toString()));
+                }
             }
 
             // Echo back to user
@@ -195,7 +225,7 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
             // Deliver to user (local or cross-instance)
             wsManager.publishAgentMessage(userId, response.toString());
 
-            // Echo to agent
+            // Echo to agent (broadcast to all tabs)
             ctx.writeAndFlush(new TextWebSocketFrame(response.toString()));
         } catch (Exception e) {
             System.err.println("handleAgentMessage error: " + e.getMessage());
@@ -214,8 +244,7 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
                     ObjectNode notification = mapper.createObjectNode();
                     notification.put("type", WsMsgType.USER_OFFLINE);
                     notification.put("userId", userId);
-                    wsManager.getAgentChannel(assignedAgent)
-                            .writeAndFlush(new TextWebSocketFrame(notification.toString()));
+                    wsManager.notifyUserOffline(assignedAgent, notification.toString());
                 } catch (Exception ignored) {}
             }
             return;
@@ -224,9 +253,7 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
         Long agentId = wsManager.getAgentIdByChannel(channelId);
         if (agentId != null) {
             wsManager.unregisterByChannel(channelId);
-            if (agentService != null) {
-                agentService.setOnline(agentId, false);
-            }
+            // markAgentOffline is now called INSIDE unregisterByChannel only when the LAST tab disconnects
         }
     }
 
@@ -234,29 +261,26 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
 
     private void notifyAgentNewUser(Long agentId, String userId) {
         if (wsManager.hasAgentLocally(agentId)) {
-            Channel ch = wsManager.getAgentChannel(agentId);
-            if (ch != null && ch.isActive()) {
-                try {
-                    ObjectNode msg = mapper.createObjectNode();
-                    msg.put("type", WsMsgType.NEW_USER);
-                    msg.put("userId", userId);
-                    msg.put("content", "New user assigned to you");
-                    ch.writeAndFlush(new TextWebSocketFrame(msg.toString()));
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+            try {
+                ObjectNode msg = mapper.createObjectNode();
+                msg.put("type", WsMsgType.NEW_USER);
+                msg.put("userId", userId);
+                msg.put("content", "New user assigned to you");
+                wsManager.notifyAgentChannel(agentId, msg.toString());
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         }
     }
 
-    private void sendAssignedGreeting(String userId, Long agentId) {
+    private void sendAssignedGreeting(ChannelHandlerContext ctx, String userId, Long agentId) {
         try {
-            String agentNickname = "客服";
+            String nickName = "客服";
             Optional<Agent> agentOpt = agentService.findById(agentId);
             if (agentOpt.isPresent()) {
-                agentNickname = agentOpt.get().getNickname();
+                nickName = agentOpt.get().getNickname();
             }
-            String greeting = agentNickname + "很高兴为您服务!";
+            String greeting = nickName + ",很高兴为您服务!";
 
             ObjectNode greetingMsg = mapper.createObjectNode();
             greetingMsg.put("type", WsMsgType.AGENT_MESSAGE);
@@ -268,28 +292,19 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
             greetingMsg.put("timestamp",
                     LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
 
-            // Deliver to user (no DB persistence — ephemeral greeting only)
-            wsManager.publishAgentMessage(userId, greetingMsg.toString());
-            // Also show to agent
+            // Deliver to user directly via the established connection
+            ctx.writeAndFlush(new TextWebSocketFrame(greetingMsg.toString()));
+            // Also show to agent (all tabs)
             if (wsManager.hasAgentLocally(agentId)) {
-                wsManager.getAgentChannel(agentId)
-                        .writeAndFlush(new TextWebSocketFrame(greetingMsg.toString()));
+                wsManager.notifyAgentChannel(agentId, greetingMsg.toString());
             }
         } catch (Exception e) {
             System.err.println("sendAssignedGreeting error: " + e.getMessage());
         }
     }
 
-    public static void sendToUser(String userId, String type, String subType, String data) {
-        // Static helper kept for backward compatibility — uses WebSocketHandler static refs are removed
-        // Now this is handled through RedisWebSocketManager
-    }
-
-    public static void sendToUserWithContent(String userId, String type, String content) {
-        // Static helper kept for backward compatibility
-    }
-
-    public static void sendToAgent(Long agentId, String type, String userId, String data) {
-        // Static helper kept for backward compatibility
-    }
+    // Static helpers kept for backward compatibility
+    public static void sendToUser(String userId, String type, String subType, String data) {}
+    public static void sendToUserWithContent(String userId, String type, String content) {}
+    public static void sendToAgent(Long agentId, String type, String userId, String data) {}
 }

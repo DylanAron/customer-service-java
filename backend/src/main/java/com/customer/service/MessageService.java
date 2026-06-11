@@ -51,35 +51,42 @@ public class MessageService {
         return msg;
     }
 
-    public List<Message> getMessages(String userId) {
-        return messageMapper.selectList(
-                new LambdaQueryWrapper<Message>()
-                        .eq(Message::getUserId, userId)
-                        .orderByAsc(Message::getCreatedAt));
+    public List<Message> getMessages(String userId, Long agentId) {
+        LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<Message>()
+                .eq(Message::getUserId, userId);
+        if (agentId != null) {
+            wrapper.eq(Message::getAgentId, agentId);
+        }
+        return messageMapper.selectList(wrapper.orderByAsc(Message::getCreatedAt));
     }
 
     public void markAsRead(String userId) {
         messageMapper.markAsRead(userId);
     }
 
+    public void markAsReadByAgent(String userId, Long agentId) {
+        messageMapper.markAsReadByAgent(userId, agentId);
+    }
+
     public List<Map<String, Object>> getUserList(Long agentId) {
         LocalDateTime sixMonthsAgo = LocalDateTime.now().minusMonths(6);
-        List<Map<String, Object>> recentUsers = messageMapper.findRecentUserIdsWithPagination(sixMonthsAgo, 1000);
+
+        // 查与该客服聊过天的用户（messages 中有 agent_id = agentId 记录）
+        List<Map<String, Object>> recentUsers;
+        if (agentId != null) {
+            recentUsers = messageMapper.findRecentUserIdsByAgent(agentId, sixMonthsAgo, 1000);
+        } else {
+            recentUsers = messageMapper.findRecentUserIdsWithPagination(sixMonthsAgo, 1000);
+        }
 
         Set<String> visibleUsers = new HashSet<>();
+        for (Map<String, Object> row : recentUsers) {
+            visibleUsers.add((String) row.get("userId"));
+        }
+
+        // 加上 Redis 中分配给该客服的用户（可能刚分配还没发消息）
         if (agentId != null) {
             visibleUsers.addAll(assignmentService.getUsersForAgent(agentId));
-            for (Map<String, Object> row : recentUsers) {
-                String uid = (String) row.get("userId");
-                Long assigned = assignmentService.getAssignedAgent(uid);
-                if (assigned != null && assigned.equals(agentId)) {
-                    visibleUsers.add(uid);
-                }
-            }
-        } else {
-            for (Map<String, Object> row : recentUsers) {
-                visibleUsers.add((String) row.get("userId"));
-            }
         }
 
         List<Map<String, Object>> result = new ArrayList<>();
@@ -94,6 +101,7 @@ public class MessageService {
             userInfo.put("nickname", user != null ? user.getNickname() : uid);
             userInfo.put("online", assignmentService.isUserOnline(uid));
 
+            // unread: 只看未读的用户消息（不管哪个客服发的）
             long unread = 0;
             List<Message> msgs = messageMapper.selectList(
                     new LambdaQueryWrapper<Message>()
@@ -106,6 +114,7 @@ public class MessageService {
             }
             userInfo.put("unread", unread);
 
+            // 最新一条消息（不管哪个客服的）
             Message lastMsg = messageMapper.selectOne(
                     new LambdaQueryWrapper<Message>()
                             .eq(Message::getUserId, uid)

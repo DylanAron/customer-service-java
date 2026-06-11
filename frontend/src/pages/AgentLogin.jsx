@@ -19,6 +19,7 @@ export default function AgentLogin() {
       if (data.role === 'agent') {
         localStorage.setItem('token', data.token)
         localStorage.setItem('agentId', data.agentId)
+        localStorage.setItem('username', data.username)
         localStorage.setItem('nickname', data.nickname || data.username)
         navigate('/agent')
       } else if (data.role === 'admin') {

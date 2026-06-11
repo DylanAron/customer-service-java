@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 8089
   shutdown: graceful
 
 spring:
@@ -8,8 +8,8 @@ spring:
 
   datasource:
     url: jdbc:mysql://localhost:3306/customer-service?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&autoReconnect=true&failOverReadOnly=false&maxReconnects=10
-    username: root
-    password: root
+    username: sportsAdmin
+    password: aw87eCTwSyhhids6.
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 20
@@ -24,8 +24,8 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: 50MB
-      max-request-size: 60MB
+      max-file-size: 100MB
+      max-request-size: 110MB
 
   data:
     redis:
@@ -55,7 +55,8 @@ jwt:
   expiration: 86400000
 
 # ========== File Storage ==========
+# 默认：JAR 包所在目录下的 filesUpload/（由 LocalFileStorageService 自动解析）
 storage:
   local:
-    base-path: /data/customer-service/filesUpload   # 生产环境请改为实际路径
+    base-path:              # 不填则默认 JAR 同级目录的 filesUpload/
   url-prefix: /uploads

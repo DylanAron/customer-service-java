@@ -31,8 +31,10 @@ public class ApiConst {
     public static final String PUBSUB_NOTIFY = "channel:notify";
 
     // ========== TTL (seconds) ==========
-    /** Online heartbeat TTL — 2 minutes */
+    /** User online heartbeat TTL — 2 minutes */
     public static final long TTL_ONLINE = 120;
+    /** Agent online heartbeat TTL — 2 minutes (switch tabs/refresh without losing online) */
+    public static final long TTL_AGENT_ONLINE = 120;
     /** Agent-user assignment TTL — 1 day */
     public static final long TTL_ASSIGNMENT = 86400;
     /** Welcome-message dedup TTL — 5 minutes */

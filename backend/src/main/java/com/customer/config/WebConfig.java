@@ -6,6 +6,7 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import java.io.File;
 import java.nio.file.Paths;
 
 @Configuration
@@ -28,10 +29,10 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // Resolve storage root: default to project-root/filesUpload/
+        // Resolve storage root: default to JAR directory /filesUpload/
         String basePath = storageBasePath;
         if (basePath == null || basePath.isBlank()) {
-            basePath = Paths.get(System.getProperty("user.dir")).getParent().resolve("filesUpload").toString();
+            basePath = System.getProperty("user.dir") + File.separator + "filesUpload";
         }
         String absolutePath = "file:" + Paths.get(basePath).normalize().toAbsolutePath().toString().replace("\\", "/") + "/";
 

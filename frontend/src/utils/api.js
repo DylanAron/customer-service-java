@@ -16,10 +16,12 @@ export function connectWebSocket(url, onMessage, onOpen, onClose) {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host;
   const wsUrl = `${protocol}//${host}${url}`;
-  let ws = new WebSocket(wsUrl);
+  let ws = null;
   let reconnectTimer = null;
+  let shouldReconnect = true;
 
   function connect() {
+    if (!shouldReconnect) return;
     ws = new WebSocket(wsUrl);
     ws.onopen = () => { console.log('WS connected'); onOpen?.(); };
     ws.onmessage = (e) => {
@@ -29,20 +31,21 @@ export function connectWebSocket(url, onMessage, onOpen, onClose) {
     ws.onclose = () => {
       console.log('WS disconnected, reconnecting in 3s...');
       onClose?.();
-      reconnectTimer = setTimeout(connect, 3000);
+      if (shouldReconnect) {
+        reconnectTimer = setTimeout(connect, 3000);
+      }
     };
     ws.onerror = () => { ws.close(); };
   }
 
-  ws.onclose = () => {
-    console.log('WS disconnected, reconnecting in 3s...');
-    onClose?.();
-    reconnectTimer = setTimeout(connect, 3000);
-  };
-  ws.onerror = () => { ws.close(); };
+  connect();
 
   return {
-    close() { clearTimeout(reconnectTimer); ws.close(); },
-    send(data) { if (ws.readyState === WebSocket.OPEN) ws.send(data); },
+    close() {
+      shouldReconnect = false;
+      clearTimeout(reconnectTimer);
+      ws?.close();
+    },
+    send(data) { if (ws?.readyState === WebSocket.OPEN) ws.send(data); },
   };
 }

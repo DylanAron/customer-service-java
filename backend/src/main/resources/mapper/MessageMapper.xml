@@ -11,6 +11,16 @@
         LIMIT #{limit}
     </select>
 
+    <select id="findRecentUserIdsByAgent" resultType="java.util.Map">
+        SELECT m.user_id AS userId, MAX(m.created_at) AS lastMsgTime
+        FROM cs_message m
+        WHERE m.agent_id = #{agentId}
+          AND m.created_at &gt;= #{since}
+        GROUP BY m.user_id
+        ORDER BY lastMsgTime DESC
+        LIMIT #{limit}
+    </select>
+
     <select id="countUnreadForAllUsers" resultType="java.util.Map">
         SELECT m.user_id AS userId, COUNT(*) AS cnt
         FROM cs_message m
@@ -18,6 +28,16 @@
           AND (m.is_read IS NULL OR m.is_read = false)
           AND m.created_at &gt;= #{since}
         GROUP BY m.user_id
+    </select>
+
+    <select id="findUnassignedUserIds" resultType="java.lang.String">
+        SELECT m.user_id
+        FROM cs_message m
+        WHERE m.agent_id IS NULL
+          AND m.direction = 'user'
+        GROUP BY m.user_id
+        ORDER BY MIN(m.created_at) ASC
+        LIMIT #{limit}
     </select>
 
 </mapper>

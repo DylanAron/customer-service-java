@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.customer.constant.ApiConst;
 import com.customer.entity.Agent;
 import com.customer.repository.AgentMapper;
+import com.customer.repository.MessageMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -26,11 +27,14 @@ public class RedisAssignmentService {
 
     private final RedisTemplate<String, String> redisTemplate;
     private final AgentMapper agentMapper;
+    private final MessageMapper messageMapper;
 
     public RedisAssignmentService(RedisTemplate<String, String> redisTemplate,
-                                   AgentMapper agentMapper) {
+                                   AgentMapper agentMapper,
+                                   MessageMapper messageMapper) {
         this.redisTemplate = redisTemplate;
         this.agentMapper = agentMapper;
+        this.messageMapper = messageMapper;
     }
 
     /**
@@ -56,16 +60,15 @@ public class RedisAssignmentService {
             removeUser(userId);
         }
 
-        // 2. Pick online agents from DB
-        List<Agent> onlineAgents = agentMapper.selectList(
-                new LambdaQueryWrapper<Agent>().eq(Agent::isOnline, true));
-        List<Agent> available = onlineAgents.stream()
-                .filter(Agent::isEnabled)
+        // 2. Pick online agents (Redis heartbeat TTL determines online status)
+        List<Agent> allEnabledAgents = agentMapper.selectList(
+                new LambdaQueryWrapper<Agent>().eq(Agent::isEnabled, true));
+        List<Agent> available = allEnabledAgents.stream()
                 .filter(a -> isAgentOnline(a.getId()))
                 .toList();
 
         if (available.isEmpty()) {
-            log.info("No online agent available for user {}, sending auto-reply", userId);
+            log.info("No online agent available for user {}, message queued for later assignment", userId);
             return null;
         }
 
@@ -120,7 +123,7 @@ public class RedisAssignmentService {
         redisTemplate.opsForValue().set(
                 ApiConst.REDIS_KEY_AGENT_ONLINE + agentId,
                 "1",
-                Duration.ofSeconds(ApiConst.TTL_ONLINE));
+                Duration.ofSeconds(ApiConst.TTL_AGENT_ONLINE));
     }
 
     public void markUserOnline(String userId) {
@@ -138,6 +141,24 @@ public class RedisAssignmentService {
         redisTemplate.delete(ApiConst.REDIS_KEY_USER_ONLINE + userId);
     }
 
+    /**
+     * Refresh the online heartbeat TTL for a user (called on ping).
+     */
+    public void refreshUserOnline(String userId) {
+        redisTemplate.expire(
+                ApiConst.REDIS_KEY_USER_ONLINE + userId,
+                Duration.ofSeconds(ApiConst.TTL_ONLINE));
+    }
+
+    /**
+     * Refresh the online heartbeat TTL for an agent (called on ping).
+     */
+    public void refreshAgentOnline(Long agentId) {
+        redisTemplate.expire(
+                ApiConst.REDIS_KEY_AGENT_ONLINE + agentId,
+                Duration.ofSeconds(ApiConst.TTL_AGENT_ONLINE));
+    }
+
     public void touchUserLastVisit(String userId) {
         redisTemplate.opsForValue().set(
                 ApiConst.REDIS_KEY_USER_LAST_VISIT + userId,
@@ -147,5 +168,63 @@ public class RedisAssignmentService {
 
     public boolean hasRecentVisit(String userId) {
         return Boolean.TRUE.equals(redisTemplate.hasKey(ApiConst.REDIS_KEY_USER_LAST_VISIT + userId));
+    }
+
+    /**
+     * Return all enabled agent IDs whose Redis online heartbeat is still alive.
+     */
+    public List<Long> findOnlineEnabledAgentIds() {
+        List<Agent> allEnabled = agentMapper.selectList(
+                new LambdaQueryWrapper<Agent>().eq(Agent::isEnabled, true));
+        return allEnabled.stream()
+                .map(Agent::getId)
+                .filter(this::isAgentOnline)
+                .toList();
+    }
+
+    /**
+     * Assign a batch of unassigned users to the specified online agent.
+     * Picks up to {@code batchSize} users who have messages but no assigned agent,
+     * ordered by earliest message first (FIFO).
+     * <p>
+     * Called when:
+     * <ul>
+     *   <li>An agent comes online ({@link #assignPendingOnLogin})</li>
+     *   <li>A periodic scheduler fires ({@link #assignPendingScheduled})</li>
+     * </ul>
+     */
+    public synchronized int assignPendingUsers(Long agentId, int batchSize) {
+        if (!isAgentOnline(agentId)) {
+            log.warn("Agent {} is not online, skipping pending assignment", agentId);
+            return 0;
+        }
+
+        List<String> unassigned = messageMapper.findUnassignedUserIds(batchSize);
+        if (unassigned.isEmpty()) {
+            return 0;
+        }
+
+        int assigned = 0;
+        for (String userId : unassigned) {
+            // Skip if user already has an assignment
+            if (getAssignedAgent(userId) != null) continue;
+
+            redisTemplate.opsForValue().set(
+                    ApiConst.REDIS_KEY_ASSIGNMENT_USER + userId,
+                    String.valueOf(agentId),
+                    Duration.ofSeconds(ApiConst.TTL_ASSIGNMENT));
+            redisTemplate.opsForSet().add(
+                    ApiConst.REDIS_KEY_ASSIGNMENT_AGENT + agentId, userId);
+            redisTemplate.expire(
+                    ApiConst.REDIS_KEY_ASSIGNMENT_AGENT + agentId,
+                    Duration.ofSeconds(ApiConst.TTL_ASSIGNMENT));
+            assigned++;
+            log.info("Pending assignment: user {} → agent {}", userId, agentId);
+        }
+
+        if (assigned > 0) {
+            log.info("Agent {} claimed {} pending user(s)", agentId, assigned);
+        }
+        return assigned;
     }
 }

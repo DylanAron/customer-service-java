@@ -58,11 +58,8 @@ public class AgentService {
     }
 
     public void setOnline(Long id, boolean online) {
-        Agent agent = agentMapper.selectById(id);
-        if (agent != null) {
-            agent.setOnline(online);
-            agentMapper.updateById(agent);
-        }
+        // 在线状态由心跳 TTL 决定，不强制写 DB；
+        // 仅更新 Redis（WS 连接 + ping 心跳维持 TTL，断开后 TTL 自动过期）
         if (online) {
             assignmentService.markAgentOnline(id);
         } else {
