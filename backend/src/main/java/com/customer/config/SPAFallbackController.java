@@ -16,7 +16,7 @@ public class SPAFallbackController {
 
     /**
      * 匹配所有前端 SPA 路由，返回 index.html。
-     * 排除 /api/*（后端接口）和 /uploads/*（文件访问）。
+     * 排除 /api/*（后端接口）和 /profile/*（文件访问）。
      */
     @GetMapping({
         "/",

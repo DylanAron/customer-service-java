@@ -15,7 +15,7 @@ public class WebConfig implements WebMvcConfigurer {
     @Value("${storage.local.base-path:}")
     private String storageBasePath;
 
-    @Value("${storage.url-prefix:/uploads}")
+    @Value("${storage.url-prefix:/profile}")
     private String urlPrefix;
 
     @Override

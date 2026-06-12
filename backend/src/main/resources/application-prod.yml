@@ -55,8 +55,7 @@ jwt:
   expiration: 86400000
 
 # ========== File Storage ==========
-# 默认：JAR 包所在目录下的 filesUpload/（由 LocalFileStorageService 自动解析）
 storage:
   local:
-    base-path:              # 不填则默认 JAR 同级目录的 filesUpload/
-  url-prefix: /uploads
+    base-path: /data/soccer/uploadPath
+  url-prefix: /profile
