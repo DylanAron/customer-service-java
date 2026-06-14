@@ -89,6 +89,7 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
                 int claimed = assignmentService.assignPendingUsers(agentId, 3);
                 if (claimed > 0) {
                     log.info("Agent {} online, claimed {} pending user(s)", agentId, claimed);
+                    wsManager.notifyAgentUserListChanged(agentId);
                 }
             }
         }

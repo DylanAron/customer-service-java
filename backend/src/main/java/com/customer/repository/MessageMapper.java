@@ -25,6 +25,9 @@ public interface MessageMapper extends BaseMapper<Message> {
     @Update("UPDATE cs_message SET is_read = true WHERE user_id = #{userId} AND agent_id = #{agentId} AND direction = 'user' AND (is_read IS NULL OR is_read = false)")
     int markAsReadByAgent(@Param("userId") String userId, @Param("agentId") Long agentId);
 
+    @Update("UPDATE cs_message SET agent_id = #{agentId} WHERE user_id = #{userId} AND agent_id IS NULL")
+    int assignUnassignedMessagesToAgent(@Param("userId") String userId, @Param("agentId") Long agentId);
+
     /**
      * Find user_ids who have messages but no assigned agent.
      * Ordered by earliest message first (FIFO).

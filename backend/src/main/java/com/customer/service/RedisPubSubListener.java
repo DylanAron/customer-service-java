@@ -87,7 +87,16 @@ public class RedisPubSubListener implements MessageListener {
      * read the same state. Reserved for future cache invalidation.
      */
     private void handleNotification(String body) {
-        log.debug("Received notification: {}", body);
-        // Future: invalidate local caches if needed
+        try {
+            JsonNode json = mapper.readTree(body);
+            Long agentId = json.has("agentId") ? json.get("agentId").asLong() : null;
+            if (agentId == null) {
+                log.debug("Received notification without agentId: {}", body);
+                return;
+            }
+            wsManager.deliverToLocalAgent(agentId, body);
+        } catch (Exception e) {
+            log.error("handleNotification error", e);
+        }
     }
 }

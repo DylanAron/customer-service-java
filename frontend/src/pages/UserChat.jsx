@@ -25,12 +25,6 @@ function formatTime(ts) {
   return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0')
 }
 
-function formatTimeFull(ts) {
-  if (!ts) return ''
-  const d = new Date(ts)
-  return (d.getMonth() + 1).toString().padStart(2, '0') + '-' + d.getDate().toString().padStart(2, '0') + ' ' + d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0')
-}
-
 function isOver5Min(t1, t2) {
   if (!t1 || !t2) return true
   return Math.abs(new Date(t1).getTime() - new Date(t2).getTime()) >= 5 * 60 * 1000
@@ -55,7 +49,6 @@ export default function UserChat() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [connected, setConnected] = useState(false)
-  const [agentAssigned, setAgentAssigned] = useState(null)
   const [noAgent, setNoAgent] = useState(false)
   const messagesEndRef = useRef(null)
   const wsRef = useRef(null)
@@ -75,7 +68,6 @@ export default function UserChat() {
     const ws = connectWebSocket('/ws/user/' + userId,
       (msg) => {
         if (msg.type === 'system' && msg.agent_assigned) {
-          setAgentAssigned(msg.agent_assigned)
           setNoAgent(false)
         } else if (msg.type === 'system' && msg.no_agent) {
           setNoAgent(true)
@@ -205,7 +197,6 @@ export default function UserChat() {
           const showDate = !prev || !isSameDay(prev.timestamp || prev.createdAt, msg.timestamp || msg.createdAt)
           const showTime = showDate || !prev || isOver5Min(prev.timestamp || prev.createdAt, msg.timestamp || msg.createdAt)
           const time = msg.timestamp || msg.createdAt
-          const showAvatar = !isUser
           return (
             <div key={i}>
               {showDate && <div style={styles.dateDivider}>{formatDate(time)}</div>}
@@ -308,7 +299,7 @@ const styles = {
   container: {
     display: 'flex',
     flexDirection: 'column',
-    height: '100vh',
+    minHeight: '100vh',
     height: '100dvh',
     background: '#F5F5F5',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif',
@@ -339,26 +330,6 @@ const styles = {
     overflow: 'hidden',
     boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
   },
-  backBtn: {
-    background: 'none',
-    border: 'none',
-    padding: '4px',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 32,
-    height: 32,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: 600,
-    color: '#fff',
-    letterSpacing: 0.5,
-    marginRight: 32,
-  },
   headerRight: { width: 48 },
 
   // Header inner
@@ -382,6 +353,8 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    width: 32,
+    height: 32,
   },
   headerCenter: {
     flex: 1,

@@ -12,8 +12,7 @@ import java.util.concurrent.TimeUnit;
  * Scheduled task that assigns unassigned users to online agents.
  * <p>
  * Triggers every 5 minutes, each time assigning up to 3 unassigned users
- * per online agent.  This prevents a single agent from being flooded when
- * many users queue up while no agents were online.
+ * per online agent. The unit is user count, not message count.
  * </p>
  */
 @Component
@@ -22,9 +21,12 @@ public class PendingAssignmentScheduler {
     private static final Logger log = LoggerFactory.getLogger(PendingAssignmentScheduler.class);
 
     private final RedisAssignmentService assignmentService;
+    private final RedisWebSocketManager wsManager;
 
-    public PendingAssignmentScheduler(RedisAssignmentService assignmentService) {
+    public PendingAssignmentScheduler(RedisAssignmentService assignmentService,
+                                      RedisWebSocketManager wsManager) {
         this.assignmentService = assignmentService;
+        this.wsManager = wsManager;
     }
 
     /**
@@ -45,6 +47,7 @@ public class PendingAssignmentScheduler {
                 int claimed = assignmentService.assignPendingUsers(agentId, 3);
                 if (claimed > 0) {
                     log.info("Scheduled assignment: agent {} claimed {} pending user(s)", agentId, claimed);
+                    wsManager.notifyAgentUserListChanged(agentId);
                 }
             } catch (Exception e) {
                 log.error("Scheduled assignment failed for agent {}", agentId, e);

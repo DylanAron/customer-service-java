@@ -230,6 +230,18 @@ public class RedisWebSocketManager {
     }
 
     /**
+     * 通知客服刷新用户列表。若客服连接在其他实例，则通过 Redis Pub/Sub 转发。
+     */
+    public void notifyAgentUserListChanged(Long agentId) {
+        String messageJson = "{\"type\":\"new_user\",\"agentId\":" + agentId + ",\"content\":\"User list changed\"}";
+        if (hasAgentLocally(agentId)) {
+            sendToAllAgentChannels(agentId, messageJson);
+            return;
+        }
+        publishNotification(messageJson);
+    }
+
+    /**
      * Send a user-offline notification to the assigned agent.
      */
     public void notifyUserOffline(Long agentId, String messageJson) {

@@ -54,7 +54,11 @@ public class AgentService {
     }
 
     public List<Agent> getAllAgents() {
-        return agentMapper.selectList(null);
+        List<Agent> agents = agentMapper.selectList(null);
+        for (Agent agent : agents) {
+            agent.setOnline(assignmentService.isAgentOnline(agent.getId()));
+        }
+        return agents;
     }
 
     public void setOnline(Long id, boolean online) {
@@ -72,8 +76,7 @@ public class AgentService {
     }
 
     public long countOnline() {
-        return agentMapper.selectCount(
-                new LambdaQueryWrapper<Agent>().eq(Agent::isOnline, true));
+        return getAllAgents().stream().filter(Agent::isOnline).count();
     }
 
     public void updatePassword(Long id, String newPassword) {

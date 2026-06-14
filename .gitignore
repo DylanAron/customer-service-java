@@ -20,3 +20,7 @@ Desktop.ini
 # Logs
 logs/
 *.log
+
+# Runtime uploads
+filesUpload/
+uploads/

@@ -79,7 +79,7 @@ public class MessageService {
             recentUsers = messageMapper.findRecentUserIdsWithPagination(sixMonthsAgo, 1000);
         }
 
-        Set<String> visibleUsers = new HashSet<>();
+        Set<String> visibleUsers = new LinkedHashSet<>();
         for (Map<String, Object> row : recentUsers) {
             visibleUsers.add((String) row.get("userId"));
         }
@@ -90,9 +90,7 @@ public class MessageService {
         }
 
         List<Map<String, Object>> result = new ArrayList<>();
-        for (Map<String, Object> row : recentUsers) {
-            String uid = (String) row.get("userId");
-            if (!visibleUsers.contains(uid)) continue;
+        for (String uid : visibleUsers) {
             Map<String, Object> userInfo = new HashMap<>();
             userInfo.put("userId", uid);
 

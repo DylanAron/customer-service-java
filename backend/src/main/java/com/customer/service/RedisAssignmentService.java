@@ -11,14 +11,13 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+import java.util.Set;
 
 /**
- * Redis-based agent-user assignment service.
- * Replaces the in-memory AgentAssignmentService to support multi-instance deployments.
- *
- * Assignment data lives in Redis so all instances see the same mapping.
- * TTL provides automatic cleanup if a user never disconnects gracefully.
+ * Redis 版客服分配服务，支持多实例共享分配关系。
  */
 @Service
 public class RedisAssignmentService {
@@ -30,25 +29,17 @@ public class RedisAssignmentService {
     private final MessageMapper messageMapper;
 
     public RedisAssignmentService(RedisTemplate<String, String> redisTemplate,
-                                   AgentMapper agentMapper,
-                                   MessageMapper messageMapper) {
+                                  AgentMapper agentMapper,
+                                  MessageMapper messageMapper) {
         this.redisTemplate = redisTemplate;
         this.agentMapper = agentMapper;
         this.messageMapper = messageMapper;
     }
 
     /**
-     * Assign an online agent to the given user.
-     * <ol>
-     *   <li>If user already has an assigned agent who is online → reuse</li>
-     *   <li>Otherwise pick a random online enabled agent</li>
-     * </ol>
-     *
-     * @param userId the user to assign
-     * @return agentId, or null if no online agent available
+     * 为用户分配在线客服：优先复用在线的既有分配，否则随机选择一个在线且启用的客服。
      */
     public synchronized Long assignAgent(String userId) {
-        // 1. Check existing assignment
         String existingKey = ApiConst.REDIS_KEY_ASSIGNMENT_USER + userId;
         String agentIdStr = redisTemplate.opsForValue().get(existingKey);
         if (agentIdStr != null) {
@@ -56,11 +47,9 @@ public class RedisAssignmentService {
             if (isAgentOnline(existingAgentId)) {
                 return existingAgentId;
             }
-            // assigned agent is offline → clear and reassign
             removeUser(userId);
         }
 
-        // 2. Pick online agents (Redis heartbeat TTL determines online status)
         List<Agent> allEnabledAgents = agentMapper.selectList(
                 new LambdaQueryWrapper<Agent>().eq(Agent::isEnabled, true));
         List<Agent> available = allEnabledAgents.stream()
@@ -72,17 +61,14 @@ public class RedisAssignmentService {
             return null;
         }
 
-        Random rand = new Random();
-        Agent selected = available.get(rand.nextInt(available.size()));
+        Agent selected = available.get(new Random().nextInt(available.size()));
         Long agentId = selected.getId();
 
-        // 3. Write to Redis
         redisTemplate.opsForValue().set(
                 ApiConst.REDIS_KEY_ASSIGNMENT_USER + userId,
                 String.valueOf(agentId),
                 Duration.ofSeconds(ApiConst.TTL_ASSIGNMENT));
-        redisTemplate.opsForSet().add(
-                ApiConst.REDIS_KEY_ASSIGNMENT_AGENT + agentId, userId);
+        redisTemplate.opsForSet().add(ApiConst.REDIS_KEY_ASSIGNMENT_AGENT + agentId, userId);
         redisTemplate.expire(
                 ApiConst.REDIS_KEY_ASSIGNMENT_AGENT + agentId,
                 Duration.ofSeconds(ApiConst.TTL_ASSIGNMENT));
@@ -141,18 +127,12 @@ public class RedisAssignmentService {
         redisTemplate.delete(ApiConst.REDIS_KEY_USER_ONLINE + userId);
     }
 
-    /**
-     * Refresh the online heartbeat TTL for a user (called on ping).
-     */
     public void refreshUserOnline(String userId) {
         redisTemplate.expire(
                 ApiConst.REDIS_KEY_USER_ONLINE + userId,
                 Duration.ofSeconds(ApiConst.TTL_ONLINE));
     }
 
-    /**
-     * Refresh the online heartbeat TTL for an agent (called on ping).
-     */
     public void refreshAgentOnline(Long agentId) {
         redisTemplate.expire(
                 ApiConst.REDIS_KEY_AGENT_ONLINE + agentId,
@@ -171,7 +151,7 @@ public class RedisAssignmentService {
     }
 
     /**
-     * Return all enabled agent IDs whose Redis online heartbeat is still alive.
+     * 查询 Redis 心跳仍有效的启用客服。
      */
     public List<Long> findOnlineEnabledAgentIds() {
         List<Agent> allEnabled = agentMapper.selectList(
@@ -183,15 +163,8 @@ public class RedisAssignmentService {
     }
 
     /**
-     * Assign a batch of unassigned users to the specified online agent.
-     * Picks up to {@code batchSize} users who have messages but no assigned agent,
-     * ordered by earliest message first (FIFO).
-     * <p>
-     * Called when:
-     * <ul>
-     *   <li>An agent comes online ({@link #assignPendingOnLogin})</li>
-     *   <li>A periodic scheduler fires ({@link #assignPendingScheduled})</li>
-     * </ul>
+     * 给指定在线客服认领一批离线留言用户。
+     * batchSize 表示最多认领的用户数，不是消息条数；每个用户被认领后，会把该用户所有未归属消息一起归到该客服。
      */
     public synchronized int assignPendingUsers(Long agentId, int batchSize) {
         if (!isAgentOnline(agentId)) {
@@ -199,27 +172,45 @@ public class RedisAssignmentService {
             return 0;
         }
 
-        List<String> unassigned = messageMapper.findUnassignedUserIds(batchSize);
+        List<String> unassigned = messageMapper.findUnassignedUserIds(Math.max(batchSize * 10, batchSize));
         if (unassigned.isEmpty()) {
             return 0;
         }
 
         int assigned = 0;
         for (String userId : unassigned) {
-            // Skip if user already has an assignment
-            if (getAssignedAgent(userId) != null) continue;
+            if (assigned >= batchSize) break;
 
-            redisTemplate.opsForValue().set(
+            Long existingAgentId = getAssignedAgent(userId);
+            if (existingAgentId != null) {
+                if (isAgentOnline(existingAgentId)) {
+                    // Redis 中已有在线客服分配时，补齐数据库归属，避免反复占用候选名额。
+                    messageMapper.assignUnassignedMessagesToAgent(userId, existingAgentId);
+                    continue;
+                }
+                removeUser(userId);
+            }
+
+            Boolean locked = redisTemplate.opsForValue().setIfAbsent(
                     ApiConst.REDIS_KEY_ASSIGNMENT_USER + userId,
                     String.valueOf(agentId),
                     Duration.ofSeconds(ApiConst.TTL_ASSIGNMENT));
-            redisTemplate.opsForSet().add(
-                    ApiConst.REDIS_KEY_ASSIGNMENT_AGENT + agentId, userId);
+            if (!Boolean.TRUE.equals(locked)) {
+                Long latestAgentId = getAssignedAgent(userId);
+                if (latestAgentId != null) {
+                    messageMapper.assignUnassignedMessagesToAgent(userId, latestAgentId);
+                }
+                continue;
+            }
+
+            redisTemplate.opsForSet().add(ApiConst.REDIS_KEY_ASSIGNMENT_AGENT + agentId, userId);
             redisTemplate.expire(
                     ApiConst.REDIS_KEY_ASSIGNMENT_AGENT + agentId,
                     Duration.ofSeconds(ApiConst.TTL_ASSIGNMENT));
+            // 认领离线留言时，同步补齐历史消息的客服归属，保证列表和会话历史能查到。
+            messageMapper.assignUnassignedMessagesToAgent(userId, agentId);
             assigned++;
-            log.info("Pending assignment: user {} → agent {}", userId, agentId);
+            log.info("Pending assignment: user {} -> agent {}", userId, agentId);
         }
 
         if (assigned > 0) {
