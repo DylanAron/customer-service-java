@@ -1,6 +1,6 @@
 package com.customer.controller;
 
-import com.customer.config.JwtUtil;
+import com.customer.config.AuthHelper;
 import com.customer.entity.Agent;
 import com.customer.service.AgentService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -13,20 +13,26 @@ import java.util.Map;
 @RequestMapping("/api/agent")
 public class AgentController {
     private final AgentService agentService;
-    private final JwtUtil jwtUtil;
+    private final AuthHelper authHelper;
 
-    public AgentController(AgentService agentService, JwtUtil jwtUtil) {
+    public AgentController(AgentService agentService, AuthHelper authHelper) {
         this.agentService = agentService;
-        this.jwtUtil = jwtUtil;
+        this.authHelper = authHelper;
     }
 
     @GetMapping("/list")
-    public ResponseEntity<List<Agent>> list() {
+    public ResponseEntity<?> list(HttpServletRequest request) {
+        if (!authHelper.isAdmin(request)) {
+            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
+        }
         return ResponseEntity.ok(agentService.getAllAgents());
     }
 
     @PostMapping("/add")
-    public ResponseEntity<?> add(@RequestBody Map<String, String> req) {
+    public ResponseEntity<?> add(@RequestBody Map<String, String> req, HttpServletRequest request) {
+        if (!authHelper.isAdmin(request)) {
+            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
+        }
         String username = req.get("username");
         String password = req.get("password");
         String nickname = req.get("nickname");
@@ -38,7 +44,10 @@ public class AgentController {
     }
 
     @PutMapping("/update/{id}")
-    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Map<String, String> req) {
+    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Map<String, String> req, HttpServletRequest request) {
+        if (!authHelper.isAdmin(request)) {
+            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
+        }
         String nickname = req.get("nickname");
         String password = req.get("password");
         Boolean enabled = req.containsKey("enabled") ? Boolean.parseBoolean(req.get("enabled")) : null;
@@ -48,7 +57,10 @@ public class AgentController {
     }
 
     @DeleteMapping("/delete/{id}")
-    public ResponseEntity<?> delete(@PathVariable Long id) {
+    public ResponseEntity<?> delete(@PathVariable Long id, HttpServletRequest request) {
+        if (!authHelper.isAdmin(request)) {
+            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
+        }
         agentService.deleteAgent(id);
         return ResponseEntity.ok(Map.of("success", true));
     }
@@ -56,12 +68,10 @@ public class AgentController {
     @PutMapping("/password")
     public ResponseEntity<?> updatePassword(@RequestBody Map<String, String> req,
                                              HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        Long agentId = authHelper.validateAgentOrAdminRequest(request);
+        if (agentId == null || agentId.equals(0L)) {
             return ResponseEntity.status(401).body(Map.of("error", "未授权"));
         }
-        String token = authHeader.substring(7);
-        Long agentId = jwtUtil.getAgentIdFromToken(token);
         agentService.updatePassword(agentId, req.get("password"));
         return ResponseEntity.ok(Map.of("success", true));
     }
@@ -69,24 +79,20 @@ public class AgentController {
     @PutMapping("/nickname")
     public ResponseEntity<?> updateNickname(@RequestBody Map<String, String> req,
                                              HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        Long agentId = authHelper.validateAgentOrAdminRequest(request);
+        if (agentId == null || agentId.equals(0L)) {
             return ResponseEntity.status(401).body(Map.of("error", "未授权"));
         }
-        String token = authHeader.substring(7);
-        Long agentId = jwtUtil.getAgentIdFromToken(token);
         agentService.updateNickname(agentId, req.get("nickname"));
         return ResponseEntity.ok(Map.of("success", true));
     }
 
     @GetMapping("/profile")
     public ResponseEntity<?> profile(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        Long agentId = authHelper.validateAgentOrAdminRequest(request);
+        if (agentId == null || agentId.equals(0L)) {
             return ResponseEntity.status(401).body(Map.of("error", "未授权"));
         }
-        String token = authHeader.substring(7);
-        Long agentId = jwtUtil.getAgentIdFromToken(token);
         var opt = agentService.findById(agentId);
         if (opt.isEmpty()) return ResponseEntity.notFound().build();
         Agent agent = opt.get();

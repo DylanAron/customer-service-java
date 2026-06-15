@@ -51,13 +51,29 @@ public class MessageService {
         return msg;
     }
 
-    public List<Message> getMessages(String userId, Long agentId) {
-        LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<Message>()
-                .eq(Message::getUserId, userId);
-        if (agentId != null) {
-            wrapper.eq(Message::getAgentId, agentId);
+    public List<Message> getMessages(String userId) {
+        return messageMapper.selectList(new LambdaQueryWrapper<Message>()
+                .eq(Message::getUserId, userId)
+                .orderByAsc(Message::getCreatedAt));
+    }
+
+    public List<Message> getMessagesForAgent(String userId, Long agentId) {
+        Long assignedAgentId = assignmentService.getAssignedAgent(userId);
+        boolean assignedToCurrentAgent = agentId.equals(assignedAgentId);
+        boolean hasAgentHistory = messageMapper.selectCount(new LambdaQueryWrapper<Message>()
+                .eq(Message::getUserId, userId)
+                .eq(Message::getAgentId, agentId)) > 0;
+
+        if (!assignedToCurrentAgent && !hasAgentHistory) {
+            return List.of();
         }
-        return messageMapper.selectList(wrapper.orderByAsc(Message::getCreatedAt));
+
+        if (assignedToCurrentAgent) {
+            // 认领后补齐未归属消息，保证客服打开用户时可以看到完整上下文。
+            messageMapper.assignUnassignedMessagesToAgent(userId, agentId);
+        }
+
+        return getMessages(userId);
     }
 
     public void markAsRead(String userId) {

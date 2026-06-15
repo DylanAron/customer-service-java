@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { connectWebSocket, request } from '../utils/api.js'
+import customerServiceAvatar from '../assets/customer_service_avatar.webp'
+import userAvatar from '../assets/user_avatar.webp'
 
 function getUserId() {
   let uid = localStorage.getItem('cs_user_id')
@@ -205,7 +207,7 @@ export default function UserChat() {
               {!isUser && (
                 <div style={styles.agentRow}>
                   <div style={styles.agentAvatarCol}>
-                    <div style={styles.agentAvatar}>客</div>
+                    <img style={styles.agentAvatar} src={customerServiceAvatar} alt="" />
                   </div>
                   <div style={styles.agentContent}>
                     {/*<div style={styles.agentName}>客服</div>*/}
@@ -251,7 +253,7 @@ export default function UserChat() {
                       <span style={styles.msgTextUser}>{msg.content}</span>
                     )}
                   </div>
-                  <div style={styles.userAvatar}>我</div>
+                  <img style={styles.userAvatar} src={userAvatar} alt="" />
                 </div>
               )}
             </div>
@@ -431,13 +433,9 @@ const styles = {
     width: 38,
     height: 38,
     borderRadius: 19,
-    background: '#4A90D9',
-    color: '#fff',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 14,
-    fontWeight: 600,
+    background: '#eef2ff',
+    display: 'block',
+    objectFit: 'cover',
   },
   agentContent: {
     display: 'flex',
@@ -493,13 +491,9 @@ const styles = {
     width: 38,
     height: 38,
     borderRadius: 19,
-    background: '#4A90D9',
-    color: '#fff',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 14,
-    fontWeight: 600,
+    background: '#eef2ff',
+    display: 'block',
+    objectFit: 'cover',
     flexShrink: 0,
     marginLeft: 6,
   },

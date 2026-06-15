@@ -45,8 +45,20 @@ public class MessageController {
     @GetMapping("/history/{userId}")
     public ResponseEntity<List<Message>> getHistory(
             @PathVariable String userId,
-            @RequestParam(required = false) Long agentId) {
-        return ResponseEntity.ok(messageService.getMessages(userId, agentId));
+            @RequestParam(required = false) Long agentId,
+            HttpServletRequest request) {
+        if (agentId != null) {
+            Long requesterAgentId = authHelper.validateAgentOrAdminRequest(request);
+            if (requesterAgentId == null || (!requesterAgentId.equals(agentId) && !requesterAgentId.equals(0L))) {
+                return ResponseEntity.status(401).build();
+            }
+            return ResponseEntity.ok(messageService.getMessagesForAgent(userId, agentId));
+        }
+        Long requesterAgentId = authHelper.validateAgentOrAdminRequest(request);
+        if (requesterAgentId != null && requesterAgentId.equals(0L)) {
+            return ResponseEntity.ok(messageService.getMessages(userId));
+        }
+        return ResponseEntity.ok(messageService.getMessages(userId));
     }
 
     @GetMapping("/users")
@@ -55,8 +67,15 @@ public class MessageController {
             @RequestParam(defaultValue = "30") int size,
             @RequestParam(required = false) Long agentId,
             HttpServletRequest request) {
-        if (authHelper.validateRequest(request) == null) {
+        Long requesterAgentId = authHelper.validateAgentOrAdminRequest(request);
+        if (requesterAgentId == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未授权"));
+        }
+        if (agentId == null && !requesterAgentId.equals(0L)) {
+            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可查看全部用户"));
+        }
+        if (agentId != null && !requesterAgentId.equals(agentId) && !requesterAgentId.equals(0L)) {
+            return ResponseEntity.status(403).body(Map.of("error", "无权查看其他客服的用户"));
         }
         return ResponseEntity.ok(messageService.getPaginatedUsers(page, size, agentId));
     }
@@ -66,8 +85,15 @@ public class MessageController {
             @PathVariable String userId,
             @RequestParam(required = false) Long agentId,
             HttpServletRequest request) {
-        if (authHelper.validateRequest(request) == null) {
+        Long requesterAgentId = authHelper.validateAgentOrAdminRequest(request);
+        if (requesterAgentId == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未授权"));
+        }
+        if (agentId == null && !requesterAgentId.equals(0L)) {
+            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可执行全量已读"));
+        }
+        if (agentId != null && !requesterAgentId.equals(agentId) && !requesterAgentId.equals(0L)) {
+            return ResponseEntity.status(403).body(Map.of("error", "无权操作其他客服的消息"));
         }
         if (agentId != null) {
             messageService.markAsReadByAgent(userId, agentId);
@@ -79,7 +105,7 @@ public class MessageController {
 
     @GetMapping("/all-messages")
     public ResponseEntity<?> getAllMessages(HttpServletRequest request) {
-        Long agentId = authHelper.validateRequest(request);
+        Long agentId = authHelper.validateAgentOrAdminRequest(request);
         if (agentId == null || agentId != 0L) {
             return ResponseEntity.status(401).body(Map.of("error", "仅管理员可操作"));
         }
@@ -88,7 +114,7 @@ public class MessageController {
 
     @PostMapping("/reset")
     public ResponseEntity<?> resetMessages(HttpServletRequest request) {
-        Long agentId = authHelper.validateRequest(request);
+        Long agentId = authHelper.validateAgentOrAdminRequest(request);
         if (agentId == null || agentId != 0L) {
             return ResponseEntity.status(401).body(Map.of("error", "仅管理员可操作"));
         }
@@ -104,7 +130,7 @@ public class MessageController {
         }
 
         // 通过 JWT token 判断是 agent 上传还是 app 用户上传
-        Long agentId = authHelper.validateRequest(request);
+        Long agentId = authHelper.validateAgentOrAdminRequest(request);
         boolean isAgentUpload = agentId != null;
 
         if (isAgentUpload) {

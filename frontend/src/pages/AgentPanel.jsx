@@ -1,6 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { connectWebSocket, request } from '../utils/api.js'
+import customerServiceAvatar from '../assets/customer_service_avatar.webp'
+import userAvatar01 from '../assets/user_avatars/user_avatar_01.webp'
+import userAvatar02 from '../assets/user_avatars/user_avatar_02.webp'
+import userAvatar03 from '../assets/user_avatars/user_avatar_03.webp'
+import userAvatar04 from '../assets/user_avatars/user_avatar_04.webp'
+import userAvatar05 from '../assets/user_avatars/user_avatar_05.webp'
+import userAvatar06 from '../assets/user_avatars/user_avatar_06.webp'
+import userAvatar07 from '../assets/user_avatars/user_avatar_07.webp'
+import userAvatar08 from '../assets/user_avatars/user_avatar_08.webp'
+import userAvatar09 from '../assets/user_avatars/user_avatar_09.webp'
+import userAvatar10 from '../assets/user_avatars/user_avatar_10.webp'
+import './workspace.css'
 
 function formatTime(ts) {
   if (!ts) return ''
@@ -8,11 +20,32 @@ function formatTime(ts) {
   return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0')
 }
 
+const userAvatars = [
+  userAvatar01,
+  userAvatar02,
+  userAvatar03,
+  userAvatar04,
+  userAvatar05,
+  userAvatar06,
+  userAvatar07,
+  userAvatar08,
+  userAvatar09,
+  userAvatar10,
+]
+
+function getUserAvatar(userId) {
+  const text = String(userId || '')
+  let hash = 0
+  for (let i = 0; i < text.length; i++) {
+    hash = (hash * 31 + text.charCodeAt(i)) >>> 0
+  }
+  return userAvatars[hash % userAvatars.length]
+}
+
 export default function AgentPanel() {
   const navigate = useNavigate()
   const token = localStorage.getItem('token')
   const agentId = localStorage.getItem('agentId')
-  const nickname = localStorage.getItem('nickname') || '客服'
   const username = localStorage.getItem('username') || ''
 
   const [users, setUsers] = useState([])
@@ -26,18 +59,21 @@ export default function AgentPanel() {
   const [showProfile, setShowProfile] = useState(false)
   const [newNickname, setNewNickname] = useState('')
   const [newPassword, setNewPassword] = useState('')
-
-  // 当前显示的昵称（state，使修改后实时更新），优先从 API 获取
-  const [displayNickname, setDisplayNickname] = useState('客服')
+  const [displayNickname, setDisplayNickname] = useState(localStorage.getItem('nickname') || '客服')
 
   const wsRef = useRef(null)
+  const messagesRef = useRef(null)
   const messagesEndRef = useRef(null)
   const userListRef = useRef(null)
   const selectedUserRef = useRef(null)
+  const selectRequestRef = useRef(0)
   const pingTimerRef = useRef(null)
 
   useEffect(() => {
-    if (!token) { navigate('/agent/login'); return }
+    if (!token || !agentId || localStorage.getItem('role') !== 'agent') {
+      navigate('/agent/login')
+      return
+    }
     refreshProfile()
     connectAgentWs()
     loadUsers(0)
@@ -47,7 +83,6 @@ export default function AgentPanel() {
     }
   }, [])
 
-  /** 从服务端同步最新客服资料（nickname 可能被管理员修改过） */
   async function refreshProfile() {
     try {
       const data = await request('/api/agent/profile')
@@ -55,10 +90,10 @@ export default function AgentPanel() {
         localStorage.setItem('nickname', data.nickname)
         setDisplayNickname(data.nickname)
       }
-      if (data.username) {
-        localStorage.setItem('username', data.username)
-      }
-    } catch {}
+      if (data.username) localStorage.setItem('username', data.username)
+    } catch (err) {
+      console.error('加载客服资料失败', err)
+    }
   }
 
   function connectAgentWs() {
@@ -89,7 +124,6 @@ export default function AgentPanel() {
       },
       () => {
         setConnected(true)
-        // 开始心跳：每 60 秒发一次 ping，刷新 Redis 在线 TTL
         clearInterval(pingTimerRef.current)
         pingTimerRef.current = setInterval(() => {
           ws?.send(JSON.stringify({ type: 'ping' }))
@@ -104,7 +138,14 @@ export default function AgentPanel() {
   }
 
   const scrollToBottom = useCallback(() => {
-    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+    setTimeout(() => {
+      const el = messagesRef.current
+      if (el) {
+        el.scrollTop = el.scrollHeight
+        return
+      }
+      messagesEndRef.current?.scrollIntoView({ block: 'end' })
+    }, 50)
   }, [])
 
   useEffect(() => { scrollToBottom() }, [messages, scrollToBottom])
@@ -113,54 +154,73 @@ export default function AgentPanel() {
     setLoading(true)
     try {
       const data = await request('/api/message/users?page=' + p + '&size=30&agentId=' + agentId)
-      if (p === 0) {
-        setUsers(data)
-      } else {
-        setUsers(prev => [...prev, ...data])
-      }
+      if (p === 0) setUsers(data)
+      else setUsers(prev => [...prev, ...data])
       setHasMore(data.length === 30)
-    } catch {}
-    setLoading(false)
+    } catch (err) {
+      console.error('加载用户列表失败', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function selectUser(userId) {
+    const requestId = selectRequestRef.current + 1
+    selectRequestRef.current = requestId
     setSelectedUser(userId)
     selectedUserRef.current = userId
+    setMessages([])
     try {
       const data = await request('/api/message/history/' + userId + '?agentId=' + agentId)
+      if (selectRequestRef.current !== requestId) return
       setMessages(data)
       scrollToBottom()
-      // Mark as read — 去掉 agentId 参数，标记该用户的所有消息为已读
-      await request('/api/message/mark-read/' + userId, { method: 'POST' })
-      loadUsers(0)
-    } catch {}
+      await request('/api/message/mark-read/' + userId + '?agentId=' + agentId, { method: 'POST' })
+      if (selectRequestRef.current === requestId) {
+        setUsers(prev => prev.map(u => u.userId === userId ? { ...u, unread: 0 } : u))
+      }
+    } catch (err) {
+      console.error('加载消息历史失败', err)
+    }
   }
 
   function sendMessage() {
     if (!input.trim() || !selectedUser) return
-    const msg = { type: 'agent_message', userId: selectedUser, content: input.trim(), msgType: 'text' }
-    wsRef.current?.send(JSON.stringify(msg))
+    wsRef.current?.send(JSON.stringify({
+      type: 'agent_message',
+      userId: selectedUser,
+      content: input.trim(),
+      msgType: 'text',
+    }))
     setInput('')
   }
 
   async function uploadFile(e) {
     const file = e.target.files?.[0]
-    if (!file) return
+    if (!file || !selectedUser) return
     const fd = new FormData()
     fd.append('file', file)
     try {
       const data = await request('/api/message/upload', { method: 'POST', body: fd })
       if (data.url) {
         const isImage = file.type.startsWith('image/')
-        wsRef.current?.send(JSON.stringify({ type: 'agent_message', userId: selectedUser, content: file.name, msgType: isImage ? 'image' : 'file', fileUrl: data.url }))
+        wsRef.current?.send(JSON.stringify({
+          type: 'agent_message',
+          userId: selectedUser,
+          content: file.name,
+          msgType: isImage ? 'image' : 'file',
+          fileUrl: data.url,
+        }))
       }
-    } catch {}
+    } catch (err) {
+      console.error('上传文件失败', err)
+    }
     e.target.value = ''
   }
 
   function handleScroll() {
     const el = userListRef.current
-    if (el && el.scrollTop + el.clientHeight >= el.scrollHeight - 50 && hasMore && !loading) {
+    if (el && el.scrollTop + el.clientHeight >= el.scrollHeight - 160 && hasMore && !loading) {
       const newPage = page + 1
       setPage(newPage)
       loadUsers(newPage)
@@ -180,7 +240,9 @@ export default function AgentPanel() {
       setShowProfile(false)
       setNewNickname('')
       setNewPassword('')
-    } catch {}
+    } catch (err) {
+      console.error('更新个人资料失败', err)
+    }
   }
 
   function handleLogout() {
@@ -191,132 +253,152 @@ export default function AgentPanel() {
     navigate('/agent/login')
   }
 
-  // Sort users
-  const sortedUsers = [...users].sort((a, b) => {
-    if (a.online !== b.online) return a.online ? -1 : 1
-    return (b.unread || 0) - (a.unread || 0)
-  })
+  const visibleUsers = users
+  const selectedUserInfo = users.find(u => u.userId === selectedUser)
+  const selectedUserAvatar = getUserAvatar(selectedUser)
+  const totalUnread = users.reduce((sum, u) => sum + (u.unread || 0), 0)
+  const onlineUsers = users.filter(u => u.online).length
 
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-      {/* Sidebar */}
-      <div style={{ width: 320, borderRight: '1px solid #E0E0E0', display: 'flex', flexDirection: 'column', background: '#F8F9FA' }}>
-        <div style={{ padding: '16px', borderBottom: '1px solid #E0E0E0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <span style={{ fontSize: 16, fontWeight: 600 }}>{displayNickname}</span>
-            <span style={{ ...statusDot, background: connected ? '#4CAF50' : '#999', marginLeft: 8 }} />
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button style={smallBtn} onClick={() => { setShowProfile(true); setNewNickname(displayNickname === '客服' ? '' : displayNickname) }}>设置</button>
-            <button style={smallBtn} onClick={handleLogout}>退出</button>
-          </div>
-        </div>
-        <div style={{ padding: '8px 12px', fontSize: 13, color: '#666', borderBottom: '1px solid #E0E0E0' }}>
-          用户列表 ({users.length})
-        </div>
-        <div ref={userListRef} onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto' }}>
-          {sortedUsers.map(u => (
-            <div key={u.userId}
-              onClick={() => selectUser(u.userId)}
-              style={{
-                padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #F0F0F0',
-                background: selectedUser === u.userId ? '#E3F2FD' : 'transparent',
-                display: 'flex', flexDirection: 'column', gap: 4
-              }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 14, fontWeight: u.unread > 0 ? 600 : 400, position: 'relative', display: 'inline-block' }}>
-                  {u.nickname || u.userId}
-                  {u.online && <span style={{ color: '#4CAF50', marginLeft: 6, fontSize: 11 }}>●</span>}
-                  {u.unread > 0 && <span style={{
-                    position: 'absolute', top: -8, right: -14,
-                    background: '#f44336', color: '#fff', borderRadius: 10,
-                    minWidth: 18, height: 18, fontSize: 11, fontWeight: 600,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    padding: '0 4px', boxSizing: 'border-box',
-                  }}>{u.unread > 99 ? '99+' : u.unread}</span>}
-                </span>
-              </div>
-              <div style={{ fontSize: 12, color: '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {u.lastMessage || '暂无消息'}
+    <div className="cs-workspace">
+      <aside className="cs-inbox">
+        <div className="cs-inbox-head">
+          <div className="cs-agent-row">
+            <img className="cs-agent-avatar" src={customerServiceAvatar} alt="" />
+            <div>
+              <div className="cs-agent-name">{displayNickname}</div>
+              <div className="cs-status-line">
+                <span className="cs-dot" style={{ background: connected ? '#16a34a' : '#94a3b8' }} />
+                {connected ? '在线接待中' : '连接中'}
               </div>
             </div>
-          ))}
-          {loading && <div style={{ textAlign: 'center', padding: 12, color: '#999' }}>加载中...</div>}
-        </div>
-      </div>
+            <div className="cs-inbox-actions">
+              <button className="cs-small-btn" onClick={() => { setShowProfile(true); setNewNickname(displayNickname === '客服' ? '' : displayNickname) }}>设置</button>
+              <button className="cs-small-btn" onClick={handleLogout}>退出</button>
+            </div>
+          </div>
 
-      {/* Chat area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#F5F5F5' }}>
+          <div className="cs-inbox-stats">
+            <div className="cs-stat"><strong>{users.length}</strong><span>会话</span></div>
+            <div className="cs-stat"><strong>{totalUnread}</strong><span>未读</span></div>
+            <div className="cs-stat"><strong>{onlineUsers}</strong><span>在线</span></div>
+          </div>
+        </div>
+
+        <div className="cs-list-bar">
+          <span>用户列表</span>
+          <button className="cs-link-btn" onClick={() => loadUsers(0)}>刷新</button>
+        </div>
+
+        <div ref={userListRef} onScroll={handleScroll} className="cs-user-list">
+          {visibleUsers.map(u => {
+            const active = selectedUser === u.userId
+            const name = u.nickname || u.userId
+            const avatar = getUserAvatar(u.userId)
+            return (
+              <button key={u.userId} onClick={() => selectUser(u.userId)} className={'cs-user-card' + (active ? ' is-active' : '')}>
+                <img className="cs-user-avatar" src={avatar} alt="" />
+                <span style={{ minWidth: 0 }}>
+                  <span className="cs-user-name-row">
+                    <span className="cs-user-name">{name}</span>
+                    {u.online && <span className="cs-online-pill">在线</span>}
+                  </span>
+                  <span className="cs-last-message">{u.lastMessage || '暂无消息'}</span>
+                </span>
+                {u.unread > 0 && <span className="cs-unread">{u.unread > 99 ? '99+' : u.unread}</span>}
+              </button>
+            )
+          })}
+          {loading && <div className="cs-loading">加载中...</div>}
+          {!loading && visibleUsers.length === 0 && <div className="cs-empty-list">暂无会话</div>}
+        </div>
+      </aside>
+
+      <main className="cs-chat">
         {!selectedUser ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999', fontSize: 16 }}>
-            请选择一个用户开始聊天
+          <div className="cs-empty">
+            <div className="cs-empty-card">
+              <div className="cs-empty-icon">聊</div>
+              <h2>选择一个用户开始接待</h2>
+              <p>新消息和待认领用户会自动出现在左侧列表。</p>
+            </div>
           </div>
         ) : (
           <>
-            <div style={{ padding: '12px 20px', background: '#fff', borderBottom: '1px solid #E0E0E0', fontSize: 15, fontWeight: 600 }}>
-              {users.find(u => u.userId === selectedUser)?.nickname || selectedUser}
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
-              {messages.map((msg, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: msg.direction === 'user' ? 'flex-start' : 'flex-end', marginBottom: 12 }}>
-                  <div style={{
-                    maxWidth: '60%', padding: '10px 16px', borderRadius: 8,
-                    background: msg.direction === 'user' ? '#fff' : '#4A90D9',
-                    color: msg.direction === 'user' ? '#333' : '#fff',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                    fontSize: 14, lineHeight: 1.5, wordBreak: 'break-word'
-                  }}>
-                    {msg.msgType === 'image' ? (
-                      <img src={'' + msg.fileUrl} alt="" style={{ maxWidth: 200, borderRadius: 4 }} onClick={() => window.open('' + msg.fileUrl)} />
-                    ) : msg.msgType === 'file' ? (
-                      <div><span>📎</span><a href={'' + msg.fileUrl} target="_blank" rel="noreferrer" style={{ color: msg.direction === 'user' ? '#4A90D9' : '#fff', marginLeft: 4 }}>{msg.content}</a></div>
-                    ) : (
-                      <span dangerouslySetInnerHTML={{ __html: msg.content }} />
-                    )}
-                    <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4, textAlign: 'right' }}>
-                      {formatTime(msg.timestamp || msg.createdAt)}
-                    </div>
+            <div className="cs-chat-header">
+              <div className="cs-chat-title-row">
+                <img className="cs-user-avatar" src={selectedUserAvatar} alt="" />
+                <div>
+                  <div className="cs-chat-user">{selectedUserInfo?.nickname || selectedUser}</div>
+                  <div className="cs-chat-status">
+                    <span className="cs-dot" style={{ background: selectedUserInfo?.online ? '#16a34a' : '#cbd5e1' }} />
+                    {selectedUserInfo?.online ? '用户在线' : '用户离线'}
                   </div>
                 </div>
-              ))}
+              </div>
+            </div>
+
+            <div ref={messagesRef} className="cs-messages">
+              {messages.map((msg, i) => {
+                const isUser = msg.direction === 'user'
+                return (
+                  <div key={i} className={'cs-message-row' + (isUser ? '' : ' is-agent')}>
+                    {isUser && <img className="cs-message-avatar" src={selectedUserAvatar} alt="" />}
+                    <div className={'cs-bubble ' + (isUser ? 'is-user' : 'is-agent')}>
+                      {msg.msgType === 'image' ? (
+                        <img src={'' + msg.fileUrl} alt="" className="cs-msg-image" onClick={() => window.open('' + msg.fileUrl)} />
+                      ) : msg.msgType === 'file' ? (
+                        <a href={'' + msg.fileUrl} target="_blank" rel="noreferrer" className="cs-file-link">{msg.content}</a>
+                      ) : (
+                        <span dangerouslySetInnerHTML={{ __html: msg.content }} />
+                      )}
+                      <div className="cs-bubble-time">{formatTime(msg.timestamp || msg.createdAt)}</div>
+                    </div>
+                    {!isUser && <img className="cs-message-avatar" src={customerServiceAvatar} alt="" />}
+                  </div>
+                )
+              })}
               <div ref={messagesEndRef} />
             </div>
-            <div style={{ padding: '12px 20px', background: '#fff', borderTop: '1px solid #E0E0E0', display: 'flex', gap: 10, alignItems: 'flex-end' }}>
-              <input type="file" id="agentFileInput" style={{display:'none'}} onChange={uploadFile} />
-              <button style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 13 }} onClick={() => document.getElementById('agentFileInput').click()}>📎</button>
+
+            <div className="cs-composer">
+              <input type="file" id="agentFileInput" style={{ display: 'none' }} onChange={uploadFile} />
+              <button className="cs-attach" disabled={!selectedUser} onClick={() => document.getElementById('agentFileInput').click()}>附件</button>
               <textarea
-                value={input} onChange={e => setInput(e.target.value)}
+                value={input}
+                onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-                style={{ flex: 1, border: '1px solid #ddd', borderRadius: 6, padding: '10px 12px', fontSize: 14, outline: 'none', resize: 'none', minHeight: 20, maxHeight: 80 }}
                 placeholder="输入消息..."
                 rows={1}
               />
-              <button onClick={sendMessage} style={{ padding: '10px 24px', background: '#4A90D9', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>发送</button>
+              <button className="cs-send" onClick={sendMessage}>发送</button>
             </div>
           </>
         )}
-      </div>
+      </main>
 
-      {/* Profile modal */}
       {showProfile && (
-        <div style={modalOverlay}>
-          <div style={modalBox}>
-            <h3 style={{ marginBottom: 16 }}>个人设置</h3>
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 13, color: '#666', display: 'block', marginBottom: 4 }}>用户名（不可修改）</label>
-              <input style={{...modalInput, background: '#f5f5f5', color: '#999'}} value={username} disabled />
+        <div className="cs-modal-mask">
+          <div className="cs-modal">
+            <div className="cs-modal-head">
+              <h3>个人设置</h3>
+              <button className="cs-close" onClick={() => setShowProfile(false)}>×</button>
             </div>
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 13, color: '#666', display: 'block', marginBottom: 4 }}>修改昵称</label>
-              <input style={modalInput} value={newNickname} onChange={e => setNewNickname(e.target.value)} placeholder="新昵称" />
-            </div>
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 13, color: '#666', display: 'block', marginBottom: 4 }}>修改密码</label>
-              <input style={modalInput} type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="新密码" />
-            </div>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowProfile(false)} style={{ padding: '8px 20px', border: '1px solid #ddd', borderRadius: 4, background: '#fff', cursor: 'pointer' }}>取消</button>
-              <button onClick={updateProfile} style={{ padding: '8px 20px', background: '#4A90D9', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>保存</button>
+            <label className="cs-field">
+              <span>用户名</span>
+              <input className="cs-input" value={username} disabled />
+            </label>
+            <label className="cs-field">
+              <span>修改昵称</span>
+              <input className="cs-input" value={newNickname} onChange={e => setNewNickname(e.target.value)} placeholder="新的显示名称" />
+            </label>
+            <label className="cs-field">
+              <span>修改密码</span>
+              <input className="cs-input" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="新的登录密码" />
+            </label>
+            <div className="cs-modal-actions">
+              <button className="cs-secondary" onClick={() => setShowProfile(false)}>取消</button>
+              <button className="cs-primary" onClick={updateProfile}>保存</button>
             </div>
           </div>
         </div>
@@ -324,9 +406,3 @@ export default function AgentPanel() {
     </div>
   )
 }
-
-const statusDot = { width: 8, height: 8, borderRadius: '50%', display: 'inline-block' }
-const smallBtn = { padding: '4px 12px', border: '1px solid #ddd', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 12 }
-const modalOverlay = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }
-const modalBox = { background: '#fff', borderRadius: 12, padding: 24, width: 360, boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }
-const modalInput = { width: '100%', padding: '10px 12px', border: '1px solid #ddd', borderRadius: 6, fontSize: 14, outline: 'none', boxSizing: 'border-box' }
