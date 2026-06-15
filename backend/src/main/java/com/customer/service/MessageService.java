@@ -57,6 +57,16 @@ public class MessageService {
                 .orderByAsc(Message::getCreatedAt));
     }
 
+    /**
+     * app 用户按 userId + agentId 获取往来消息（不涉及客服分配逻辑）
+     */
+    public List<Message> getMessagesByAgent(String userId, Long agentId) {
+        return messageMapper.selectList(new LambdaQueryWrapper<Message>()
+                .eq(Message::getUserId, userId)
+                .eq(Message::getAgentId, agentId)
+                .orderByAsc(Message::getCreatedAt));
+    }
+
     public List<Message> getMessagesForAgent(String userId, Long agentId) {
         Long assignedAgentId = assignmentService.getAssignedAgent(userId);
         boolean assignedToCurrentAgent = agentId.equals(assignedAgentId);

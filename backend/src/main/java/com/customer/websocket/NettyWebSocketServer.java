@@ -1,6 +1,7 @@
 package com.customer.websocket;
 
 import com.customer.service.AgentService;
+import com.customer.service.AutoReplyRuleService;
 import com.customer.service.MessageService;
 import com.customer.service.RedisAssignmentService;
 import com.customer.service.SettingService;
@@ -36,6 +37,7 @@ public class NettyWebSocketServer {
     private final RedisAssignmentService assignmentService;
     private final SettingService settingService;
     private final RedisWebSocketManager wsManager;
+    private final AutoReplyRuleService autoReplyRuleService;
 
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
@@ -43,12 +45,14 @@ public class NettyWebSocketServer {
     public NettyWebSocketServer(MessageService messageService, AgentService agentService,
                                  RedisAssignmentService assignmentService,
                                  SettingService settingService,
-                                 RedisWebSocketManager wsManager) {
+                                 RedisWebSocketManager wsManager,
+                                 AutoReplyRuleService autoReplyRuleService) {
         this.messageService = messageService;
         this.agentService = agentService;
         this.assignmentService = assignmentService;
         this.settingService = settingService;
         this.wsManager = wsManager;
+        this.autoReplyRuleService = autoReplyRuleService;
     }
 
     @PostConstruct
@@ -78,7 +82,7 @@ public class NettyWebSocketServer {
                             pipeline.addLast(new HttpObjectAggregator(65536));
                             // checkStartsWith=true so /ws/user/xxx and /ws/agent/xxx are all matched
                             pipeline.addLast(new WebSocketServerProtocolHandler("/ws", null, false, 65536, false, true));
-                            pipeline.addLast(new WebSocketHandler(messageService, assignmentService, agentService, settingService, wsManager));
+                            pipeline.addLast(new WebSocketHandler(messageService, assignmentService, agentService, settingService, wsManager, autoReplyRuleService));
                         }
                     });
 

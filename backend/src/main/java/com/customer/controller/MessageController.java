@@ -48,15 +48,14 @@ public class MessageController {
             @RequestParam(required = false) Long agentId,
             HttpServletRequest request) {
         if (agentId != null) {
+            // app 用户携带 userId + agentId 查看聊天记录，不需要鉴权，只返回该客服的消息
             Long requesterAgentId = authHelper.validateAgentOrAdminRequest(request);
-            if (requesterAgentId == null || (!requesterAgentId.equals(agentId) && !requesterAgentId.equals(0L))) {
-                return ResponseEntity.status(401).build();
+            if (requesterAgentId != null && (requesterAgentId.equals(agentId) || requesterAgentId.equals(0L))) {
+                // 客服或管理员：走完整分配逻辑
+                return ResponseEntity.ok(messageService.getMessagesForAgent(userId, agentId));
             }
-            return ResponseEntity.ok(messageService.getMessagesForAgent(userId, agentId));
-        }
-        Long requesterAgentId = authHelper.validateAgentOrAdminRequest(request);
-        if (requesterAgentId != null && requesterAgentId.equals(0L)) {
-            return ResponseEntity.ok(messageService.getMessages(userId));
+            // app 用户：按 userId + agentId 过滤，只返回该客服的往来消息
+            return ResponseEntity.ok(messageService.getMessagesByAgent(userId, agentId));
         }
         return ResponseEntity.ok(messageService.getMessages(userId));
     }

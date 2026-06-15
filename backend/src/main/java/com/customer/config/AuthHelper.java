@@ -42,7 +42,7 @@ public class AuthHelper {
      * 管理员 token 的 agentId 固定为 0。
      */
     public boolean isAdmin(HttpServletRequest request) {
-        return Long.valueOf(0L).equals(validateRequest(request));
+        return Long.valueOf(0L).equals(validateAgentOrAdminRequest(request));
     }
 
     /**

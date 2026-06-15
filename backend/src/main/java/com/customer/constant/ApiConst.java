@@ -24,6 +24,8 @@ public class ApiConst {
     public static final String REDIS_KEY_SETTING_WELCOME = "settings:welcome_message";
     /** auto-reply message content */
     public static final String REDIS_KEY_SETTING_AUTO_REPLY = "settings:auto_reply_message";
+    /** userId -> cooldown marker for keyword auto reply */
+    public static final String REDIS_KEY_AUTO_REPLY_COOLDOWN = "auto_reply:cooldown:";
 
     // ========== Redis Pub/Sub channels ==========
     public static final String PUBSUB_USER_MESSAGE = "channel:user_msg";
@@ -41,6 +43,8 @@ public class ApiConst {
     public static final long TTL_LAST_VISIT = 300;
     /** Local settings cache TTL — 1 hour (in seconds) */
     public static final long TTL_SETTINGS_CACHE = 3600;
+    /** Same user can trigger keyword auto reply at most once within 2 minutes */
+    public static final long TTL_AUTO_REPLY_COOLDOWN = 120;
 
     private ApiConst() {}
 }

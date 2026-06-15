@@ -32,17 +32,20 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
     private final AgentService agentService;
     private final SettingService settingService;
     private final RedisWebSocketManager wsManager;
+    private final AutoReplyRuleService autoReplyRuleService;
 
     public WebSocketHandler(MessageService messageService,
                             RedisAssignmentService assignmentService,
                             AgentService agentService,
                             SettingService settingService,
-                            RedisWebSocketManager wsManager) {
+                            RedisWebSocketManager wsManager,
+                            AutoReplyRuleService autoReplyRuleService) {
         this.messageService = messageService;
         this.assignmentService = assignmentService;
         this.agentService = agentService;
         this.settingService = settingService;
         this.wsManager = wsManager;
+        this.autoReplyRuleService = autoReplyRuleService;
     }
 
     @Override
@@ -188,6 +191,10 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
 
             // Echo back to user
             ctx.writeAndFlush(new TextWebSocketFrame(response.toString()));
+
+            Long autoReplyAgentId = assignedAgent;
+            autoReplyRuleService.match(userId, content).ifPresent(match ->
+                    sendKeywordAutoReply(userId, autoReplyAgentId, match.replyContent(), channelCode));
         } catch (Exception e) {
             System.err.println("handleUserMessage error: " + e.getMessage());
         }
@@ -301,6 +308,29 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
             }
         } catch (Exception e) {
             System.err.println("sendAssignedGreeting error: " + e.getMessage());
+        }
+    }
+
+    private void sendKeywordAutoReply(String userId, Long agentId, String replyContent, String channelCode) {
+        try {
+            Message msg = messageService.saveMessage(userId, agentId, replyContent, "text", null, "agent", channelCode);
+
+            ObjectNode response = mapper.createObjectNode();
+            response.put("type", WsMsgType.AGENT_MESSAGE);
+            response.put("userId", userId);
+            if (agentId != null) response.put("agentId", agentId);
+            response.put("content", replyContent);
+            response.put("msgType", "text");
+            response.put("direction", "agent");
+            response.put("timestamp", msg.getCreatedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+            response.put("autoReply", true);
+
+            wsManager.publishAgentMessage(userId, response.toString());
+            if (agentId != null) {
+                wsManager.publishUserMessage(agentId, response.toString());
+            }
+        } catch (Exception e) {
+            System.err.println("sendKeywordAutoReply error: " + e.getMessage());
         }
     }
 
