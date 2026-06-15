@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>管理员后台预览</title>
+  <link rel="stylesheet" href="../../frontend/src/pages/workspace.css" />
+  <style>
+    body { margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="cs-admin">
+    <aside class="cs-admin-sidebar">
+      <div class="cs-admin-brand">
+        <div class="cs-admin-logo">客</div>
+        <div>
+          <div class="cs-admin-title">客服管理系统</div>
+          <div class="cs-admin-sub">管理后台</div>
+        </div>
+      </div>
+      <nav class="cs-admin-nav">
+        <button class="is-active">客服管理</button>
+        <button>自动回复</button>
+        <button>聊天记录</button>
+      </nav>
+      <button class="cs-admin-logout">退出登录</button>
+    </aside>
+
+    <main class="cs-admin-main">
+      <header class="cs-admin-top">
+        <div>
+          <h1>客服管理</h1>
+          <p>在线客服系统运行与服务配置</p>
+        </div>
+        <button class="cs-admin-refresh">刷新数据</button>
+      </header>
+
+      <section class="cs-admin-metrics">
+        <div class="cs-admin-metric"><b>3</b><span>在线客服</span></div>
+        <div class="cs-admin-metric"><b>5</b><span>启用客服</span></div>
+        <div class="cs-admin-metric"><b>48</b><span>会话用户</span></div>
+        <div class="cs-admin-metric"><b>12</b><span>未读消息</span></div>
+      </section>
+
+      <section class="cs-panel">
+        <div class="cs-panel-head">
+          <div>
+            <h2>客服列表</h2>
+            <p>管理客服账号、昵称、启用状态与在线状态。</p>
+          </div>
+          <button class="cs-primary">新增客服</button>
+        </div>
+        <div class="cs-table-wrap">
+          <table class="cs-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>用户名</th>
+                <th>昵称</th>
+                <th>状态</th>
+                <th>在线</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>2</td>
+                <td>kf1</td>
+                <td>林客服</td>
+                <td><span class="cs-status-pill is-success">正常</span></td>
+                <td><span class="cs-status-pill is-success">在线</span></td>
+                <td><div class="cs-actions"><button class="cs-btn blue">编辑</button><button class="cs-btn orange">禁用</button><button class="cs-btn red">删除</button></div></td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td>kf2</td>
+                <td>周客服</td>
+                <td><span class="cs-status-pill is-success">正常</span></td>
+                <td><span class="cs-muted-pill">离线</span></td>
+                <td><div class="cs-actions"><button class="cs-btn blue">编辑</button><button class="cs-btn orange">禁用</button><button class="cs-btn red">删除</button></div></td>
+              </tr>
+              <tr>
+                <td>4</td>
+                <td>kf3</td>
+                <td>陈客服</td>
+                <td><span class="cs-status-pill is-danger">已禁用</span></td>
+                <td><span class="cs-muted-pill">离线</span></td>
+                <td><div class="cs-actions"><button class="cs-btn blue">编辑</button><button class="cs-btn green">启用</button><button class="cs-btn red">删除</button></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

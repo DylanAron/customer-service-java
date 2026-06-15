@@ -46,6 +46,8 @@ public class MessageController {
     public ResponseEntity<List<Message>> getHistory(
             @PathVariable String userId,
             @RequestParam(required = false) Long agentId,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) Long beforeId,
             HttpServletRequest request) {
         if (agentId != null) {
             // app 用户携带 userId + agentId 查看聊天记录，不需要鉴权，只返回该客服的消息
@@ -54,8 +56,8 @@ public class MessageController {
                 // 客服或管理员：走完整分配逻辑
                 return ResponseEntity.ok(messageService.getMessagesForAgent(userId, agentId));
             }
-            // app 用户：按 userId + agentId 过滤，只返回该客服的往来消息
-            return ResponseEntity.ok(messageService.getMessagesByAgent(userId, agentId));
+            // app 用户：按 userId + agentId 过滤，分页返回该客服的消息
+            return ResponseEntity.ok(messageService.getMessagesByAgent(userId, agentId, size, beforeId));
         }
         return ResponseEntity.ok(messageService.getMessages(userId));
     }

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>客服工作台预览</title>
+  <link rel="stylesheet" href="../../frontend/src/pages/workspace.css" />
+  <style>
+    body { margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="cs-workspace">
+    <aside class="cs-rail">
+      <div class="cs-rail-logo">客</div>
+      <div class="cs-rail-nav"><button class="cs-rail-btn">会话</button></div>
+      <div class="cs-rail-spacer"></div>
+      <div class="cs-rail-avatar">林</div>
+    </aside>
+
+    <aside class="cs-inbox">
+      <div class="cs-inbox-head">
+        <div class="cs-agent-row">
+          <div class="cs-agent-avatar">林</div>
+          <div>
+            <div class="cs-agent-name">林客服</div>
+            <div class="cs-status-line"><span class="cs-dot" style="background:#16a34a"></span>在线接待中</div>
+          </div>
+          <div class="cs-inbox-actions">
+            <button class="cs-small-btn">设置</button>
+            <button class="cs-small-btn">退出</button>
+          </div>
+        </div>
+        <div class="cs-inbox-stats">
+          <div class="cs-stat"><strong>18</strong><span>会话</span></div>
+          <div class="cs-stat"><strong>7</strong><span>未读</span></div>
+          <div class="cs-stat"><strong>5</strong><span>在线</span></div>
+        </div>
+      </div>
+      <div class="cs-list-bar"><span>用户列表</span><button class="cs-link-btn">刷新</button></div>
+      <div class="cs-user-list">
+        <button class="cs-user-card is-active">
+          <span class="cs-user-avatar">王</span>
+          <span style="min-width:0">
+            <span class="cs-user-name-row"><span class="cs-user-name">王先生</span><span class="cs-online-pill">在线</span></span>
+            <span class="cs-last-message">订单状态什么时候更新？</span>
+          </span>
+          <span class="cs-unread">3</span>
+        </button>
+        <button class="cs-user-card">
+          <span class="cs-user-avatar">李</span>
+          <span style="min-width:0">
+            <span class="cs-user-name-row"><span class="cs-user-name">李女士</span><span class="cs-online-pill">在线</span></span>
+            <span class="cs-last-message">售后问题待处理</span>
+          </span>
+          <span class="cs-unread">2</span>
+        </button>
+        <button class="cs-user-card">
+          <span class="cs-user-avatar">陈</span>
+          <span style="min-width:0">
+            <span class="cs-user-name-row"><span class="cs-user-name">陈同学</span></span>
+            <span class="cs-last-message">可以帮我修改收货地址吗？</span>
+          </span>
+        </button>
+        <button class="cs-user-card">
+          <span class="cs-user-avatar">赵</span>
+          <span style="min-width:0">
+            <span class="cs-user-name-row"><span class="cs-user-name">赵先生</span></span>
+            <span class="cs-last-message">发票怎么开？</span>
+          </span>
+          <span class="cs-unread">1</span>
+        </button>
+      </div>
+    </aside>
+
+    <main class="cs-chat">
+      <div class="cs-chat-header">
+        <div class="cs-chat-title-row">
+          <span class="cs-user-avatar">王</span>
+          <div>
+            <div class="cs-chat-user">王先生</div>
+            <div class="cs-chat-status"><span class="cs-dot" style="background:#16a34a"></span>用户在线</div>
+          </div>
+        </div>
+      </div>
+      <div class="cs-messages">
+        <div class="cs-message-row">
+          <span class="cs-message-avatar">王</span>
+          <div class="cs-bubble is-user">你好，我想问一下订单状态什么时候更新？<div class="cs-bubble-time">14:21</div></div>
+        </div>
+        <div class="cs-message-row is-agent">
+          <div class="cs-bubble is-agent">您好，我帮您查一下。请稍等片刻。<div class="cs-bubble-time">14:22</div></div>
+        </div>
+        <div class="cs-message-row">
+          <span class="cs-message-avatar">王</span>
+          <div class="cs-bubble is-user">好的，谢谢。<div class="cs-bubble-time">14:22</div></div>
+        </div>
+        <div class="cs-message-row is-agent">
+          <div class="cs-bubble is-agent">已确认，您的订单预计今天晚些时候同步物流信息。<div class="cs-bubble-time">14:24</div></div>
+        </div>
+      </div>
+      <div class="cs-composer">
+        <button class="cs-attach">附件</button>
+        <textarea rows="1" placeholder="输入消息..."></textarea>
+        <button class="cs-send">发送</button>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

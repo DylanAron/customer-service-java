@@ -58,13 +58,24 @@ public class MessageService {
     }
 
     /**
-     * app 用户按 userId + agentId 获取往来消息（不涉及客服分配逻辑）
+     * app 用户按 userId + agentId 获取往来消息（不涉及客服分配逻辑），分页
      */
-    public List<Message> getMessagesByAgent(String userId, Long agentId) {
-        return messageMapper.selectList(new LambdaQueryWrapper<Message>()
+    public List<Message> getMessagesByAgent(String userId, Long agentId, int size, Long beforeId) {
+        LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<Message>()
                 .eq(Message::getUserId, userId)
-                .eq(Message::getAgentId, agentId)
-                .orderByAsc(Message::getCreatedAt));
+                .eq(Message::getAgentId, agentId);
+
+        if (beforeId != null) {
+            wrapper.lt(Message::getId, beforeId);
+        }
+
+        // 取最新 N 条（倒序），再反转为正序供前端显示
+        List<Message> messages = messageMapper.selectList(wrapper
+                .orderByDesc(Message::getId)
+                .last("LIMIT " + size));
+
+        Collections.reverse(messages);
+        return messages;
     }
 
     public List<Message> getMessagesForAgent(String userId, Long agentId) {
