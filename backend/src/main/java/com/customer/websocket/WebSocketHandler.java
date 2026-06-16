@@ -69,6 +69,8 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
                 ctx.writeAndFlush(new TextWebSocketFrame(welcome.toString()));
                 assignmentService.touchUserLastVisit(userId);
 
+                // 检查是否已有分配：仅首次分配时发送问候语
+                Long existingAgent = assignmentService.getAssignedAgent(userId);
                 Long agentId = assignmentService.assignAgent(userId);
                 if (agentId != null) {
                     ObjectNode assignedMsg = mapper.createObjectNode();
@@ -76,7 +78,10 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
                     assignedMsg.put("agent_assigned", String.valueOf(agentId));
                     ctx.writeAndFlush(new TextWebSocketFrame(assignedMsg.toString()));
                     notifyAgentNewUser(agentId, userId);
-                    sendAssignedGreeting(ctx, userId, agentId);
+                    // 仅在新分配时发送问候语，每次重连不再重复
+                    if (existingAgent == null || !agentId.equals(existingAgent)) {
+                        sendAssignedGreeting(ctx, userId, agentId);
+                    }
                 } else {
                     ObjectNode noAgentMsg = mapper.createObjectNode();
                     noAgentMsg.put("type", WsMsgType.SYSTEM);

@@ -217,8 +217,8 @@ public class MessageService {
     }
 
     /**
-     * 记录用户最后看到的消息 ID（存入 Redis，用于推送通知的增量查询基准）。
-     * 仅当 lastReadMsgId 大于已有值时才更新。
+     * 记录用户最后看到的消息 ID（存入 Redis，用于推送通知的增量查询基准），
+     * 同时将数据库中该用户接收的客服消息标记为已读。
      */
     public void markUserRead(String userId, Long lastReadMsgId) {
         if (lastReadMsgId == null) return;
@@ -227,5 +227,7 @@ public class MessageService {
         assignmentService.getRedisTemplate().opsForValue().set(
                 key, String.valueOf(lastReadMsgId),
                 java.time.Duration.ofDays(7));
+        // 同步更新数据库已读状态：将该用户下、id <= lastReadMsgId 的 agent 消息标为已读
+        messageMapper.markAgentMessagesReadUpTo(userId, lastReadMsgId);
     }
 }

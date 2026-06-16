@@ -57,4 +57,13 @@
         LIMIT 1
     </select>
 
+    <update id="markAgentMessagesReadUpTo">
+        UPDATE cs_message
+        SET is_read = true
+        WHERE user_id = #{userId}
+          AND direction = 'agent'
+          AND id &lt;= #{lastReadMsgId}
+          AND (is_read IS NULL OR is_read = false)
+    </update>
+
 </mapper>
