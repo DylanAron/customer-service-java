@@ -40,4 +40,21 @@
         LIMIT #{limit}
     </select>
 
+    <select id="countAgentMessagesAfter" resultType="int">
+        SELECT COUNT(*)
+        FROM cs_message
+        WHERE user_id = #{userId}
+          AND direction = 'agent'
+          AND id > #{afterId}
+    </select>
+
+    <select id="findLatestAgentMessage" resultType="java.util.Map">
+        SELECT m.agent_id AS agentId, m.created_at AS createdAt
+        FROM cs_message m
+        WHERE m.user_id = #{userId}
+          AND m.direction = 'agent'
+        ORDER BY m.id DESC
+        LIMIT 1
+    </select>
+
 </mapper>

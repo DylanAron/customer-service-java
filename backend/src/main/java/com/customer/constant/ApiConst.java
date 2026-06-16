@@ -8,6 +8,7 @@ public class ApiConst {
     // ========== WebSocket path prefixes ==========
     public static final String WS_USER_PREFIX = "/ws/user/";
     public static final String WS_AGENT_PREFIX = "/ws/agent/";
+    public static final String WS_PUSH_PREFIX = "/ws/push/";
 
     // ========== Redis key prefixes ==========
     /** userId -> agentId, TTL 1 day */

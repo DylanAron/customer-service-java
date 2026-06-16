@@ -1,8 +1,10 @@
 package com.customer.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.customer.entity.Agent;
 import com.customer.entity.CsUser;
 import com.customer.entity.Message;
+import com.customer.repository.AgentMapper;
 import com.customer.repository.CsUserMapper;
 import com.customer.repository.MessageMapper;
 import org.springframework.stereotype.Service;
@@ -14,12 +16,15 @@ import java.util.*;
 public class MessageService {
     private final MessageMapper messageMapper;
     private final CsUserMapper csUserMapper;
+    private final AgentMapper agentMapper;
     private final RedisAssignmentService assignmentService;
 
     public MessageService(MessageMapper messageMapper, CsUserMapper csUserMapper,
+                          AgentMapper agentMapper,
                           RedisAssignmentService assignmentService) {
         this.messageMapper = messageMapper;
         this.csUserMapper = csUserMapper;
+        this.agentMapper = agentMapper;
         this.assignmentService = assignmentService;
     }
 
@@ -184,5 +189,43 @@ public class MessageService {
 
     public List<Message> getAllMessagesForAdmin() {
         return messageMapper.selectList(null);
+    }
+
+    /**
+     * 查询用户未读的客服消息数量（用户视角），以及最近发送消息的客服信息。
+     * 用于 app 推送通知。
+     */
+    public Map<String, Object> getUnreadInfo(String userId, Long afterId) {
+        int count = messageMapper.countAgentMessagesAfter(userId, afterId);
+        Map<String, Object> info = new HashMap<>();
+        info.put("count", count);
+        info.put("afterId", afterId);
+
+        // 获取最近发送消息的客服信息
+        Map<String, Object> latestAgent = messageMapper.findLatestAgentMessage(userId);
+        if (latestAgent != null && latestAgent.get("agentId") != null) {
+            info.put("latestAgentId", latestAgent.get("agentId"));
+            Long agentId = ((Number) latestAgent.get("agentId")).longValue();
+            Agent agent = agentMapper.selectById(agentId);
+            info.put("latestAgentName", agent != null ? agent.getNickname() : "客服");
+        } else {
+            info.put("latestAgentId", null);
+            info.put("latestAgentName", null);
+        }
+
+        return info;
+    }
+
+    /**
+     * 记录用户最后看到的消息 ID（存入 Redis，用于推送通知的增量查询基准）。
+     * 仅当 lastReadMsgId 大于已有值时才更新。
+     */
+    public void markUserRead(String userId, Long lastReadMsgId) {
+        if (lastReadMsgId == null) return;
+        // 使用 Redis 存储，key: user:lastread:{userId}, value: msgId, TTL: 7 天
+        String key = "user:lastread:" + userId;
+        assignmentService.getRedisTemplate().opsForValue().set(
+                key, String.valueOf(lastReadMsgId),
+                java.time.Duration.ofDays(7));
     }
 }

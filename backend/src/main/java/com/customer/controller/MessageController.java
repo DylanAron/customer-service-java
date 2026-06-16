@@ -42,6 +42,33 @@ public class MessageController {
         this.authHelper = authHelper;
     }
 
+    /**
+     * 获取用户未读消息信息（app 端推送通知用，无需认证）。
+     * afterId 参数用于增量查询——前端传入上一次看到的消息ID。
+     */
+    @GetMapping("/unread-count/{userId}")
+    public ResponseEntity<Map<String, Object>> getUnreadCount(
+            @PathVariable String userId,
+            @RequestParam(defaultValue = "0") Long afterId) {
+        return ResponseEntity.ok(messageService.getUnreadInfo(userId, afterId));
+    }
+
+    /**
+     * App 用户标记消息已读（无需认证）。
+     * 前端进入聊天页后调用，记录用户最后看到的消息 ID。
+     */
+    @PostMapping("/mark-user-read/{userId}")
+    public ResponseEntity<Map<String, Object>> markUserRead(
+            @PathVariable String userId,
+            @RequestBody(required = false) Map<String, Object> body) {
+        Long lastReadMsgId = null;
+        if (body != null && body.get("lastReadMsgId") != null) {
+            lastReadMsgId = ((Number) body.get("lastReadMsgId")).longValue();
+        }
+        messageService.markUserRead(userId, lastReadMsgId);
+        return ResponseEntity.ok(Map.of("success", true));
+    }
+
     @GetMapping("/history/{userId}")
     public ResponseEntity<List<Message>> getHistory(
             @PathVariable String userId,

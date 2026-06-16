@@ -36,6 +36,10 @@ public class RedisAssignmentService {
         this.messageMapper = messageMapper;
     }
 
+    public RedisTemplate<String, String> getRedisTemplate() {
+        return redisTemplate;
+    }
+
     /**
      * 为用户分配在线客服：优先复用在线的既有分配，否则随机选择一个在线且启用的客服。
      */

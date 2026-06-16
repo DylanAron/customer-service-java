@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Map;
 import java.util.Optional;
 
 import org.slf4j.Logger;
@@ -82,6 +83,41 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
                     noAgentMsg.put("no_agent", "当前没有在线客服，您可留言，我们会尽快回复您");
                     ctx.writeAndFlush(new TextWebSocketFrame(noAgentMsg.toString()));
                 }
+            } else if (uri != null && uri.startsWith(ApiConst.WS_PUSH_PREFIX)) {
+                // ===== Push 推送端点：不触发分配/问候语，仅注册通道 + 发送初始未读数 =====
+                String queryPart = uri.substring(ApiConst.WS_PUSH_PREFIX.length());
+                String userId;
+                long afterId = 0;
+                int qIdx = queryPart.indexOf('?');
+                if (qIdx > 0) {
+                    userId = queryPart.substring(0, qIdx);
+                } else {
+                    userId = queryPart;
+                }
+
+                // 从 Redis 恢复用户最后已读消息 ID，避免用 0 重复计算全部历史
+                String key = "user:lastread:" + userId;
+                String lastReadStr = assignmentService.getRedisTemplate().opsForValue().get(key);
+                if (lastReadStr != null) {
+                    try { afterId = Long.parseLong(lastReadStr); } catch (NumberFormatException ignored) {}
+                }
+
+                wsManager.registerUser(userId, ctx.channel());
+                assignmentService.markUserOnline(userId);
+
+                // 发送初始未读信息
+                Map<String, Object> unreadInfo = messageService.getUnreadInfo(userId, afterId);
+                ObjectNode pushMsg = mapper.createObjectNode();
+                pushMsg.put("type", "unread_info");
+                pushMsg.put("count", ((Number) unreadInfo.get("count")).intValue());
+                pushMsg.put("afterId", afterId);
+                if (unreadInfo.get("latestAgentId") != null) {
+                    pushMsg.put("latestAgentId", ((Number) unreadInfo.get("latestAgentId")).longValue());
+                    pushMsg.put("latestAgentName", (String) unreadInfo.get("latestAgentName"));
+                }
+                ctx.writeAndFlush(new TextWebSocketFrame(pushMsg.toString()));
+                log.info("Push WS connected: user={}, afterId={}, unread={}", userId, afterId,
+                        unreadInfo.get("count"));
             } else if (uri != null && uri.startsWith(ApiConst.WS_AGENT_PREFIX)) {
                 Long agentId = Long.parseLong(uri.substring(ApiConst.WS_AGENT_PREFIX.length()));
                 wsManager.registerAgent(agentId, ctx.channel());
@@ -222,6 +258,7 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
 
             ObjectNode response = mapper.createObjectNode();
             response.put("type", WsMsgType.AGENT_MESSAGE);
+            response.put("id", msg.getId());
             response.put("userId", userId);
             response.put("agentId", agentId);
             response.put("content", content);
@@ -317,6 +354,7 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
 
             ObjectNode response = mapper.createObjectNode();
             response.put("type", WsMsgType.AGENT_MESSAGE);
+            response.put("id", msg.getId());
             response.put("userId", userId);
             if (agentId != null) response.put("agentId", agentId);
             response.put("content", replyContent);

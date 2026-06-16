@@ -33,4 +33,14 @@ public interface MessageMapper extends BaseMapper<Message> {
      * Ordered by earliest message first (FIFO).
      */
     List<String> findUnassignedUserIds(@Param("limit") int limit);
+
+    /**
+     * Count agent-direction messages for a user after a given message id.
+     */
+    int countAgentMessagesAfter(@Param("userId") String userId, @Param("afterId") Long afterId);
+
+    /**
+     * Find the most recent agent who sent a message to this user.
+     */
+    Map<String, Object> findLatestAgentMessage(@Param("userId") String userId);
 }
