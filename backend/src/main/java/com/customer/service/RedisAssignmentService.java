@@ -91,6 +91,21 @@ public class RedisAssignmentService {
         return users != null ? new ArrayList<>(users) : List.of();
     }
 
+    /**
+     * 将用户直接分配给指定客服（用于接管离线客服的用户）。
+     */
+    public void assignAgentToUser(String userId, Long agentId) {
+        redisTemplate.opsForValue().set(
+                ApiConst.REDIS_KEY_ASSIGNMENT_USER + userId,
+                String.valueOf(agentId),
+                Duration.ofSeconds(ApiConst.TTL_ASSIGNMENT));
+        redisTemplate.opsForSet().add(ApiConst.REDIS_KEY_ASSIGNMENT_AGENT + agentId, userId);
+        redisTemplate.expire(
+                ApiConst.REDIS_KEY_ASSIGNMENT_AGENT + agentId,
+                Duration.ofSeconds(ApiConst.TTL_ASSIGNMENT));
+        log.info("Agent {} took over user {}", agentId, userId);
+    }
+
     public void removeUser(String userId) {
         String agentIdStr = redisTemplate.opsForValue().get(ApiConst.REDIS_KEY_ASSIGNMENT_USER + userId);
         if (agentIdStr != null) {

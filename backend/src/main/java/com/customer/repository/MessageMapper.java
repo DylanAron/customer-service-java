@@ -34,7 +34,7 @@ public interface MessageMapper extends BaseMapper<Message> {
      */
     List<String> findUnassignedUserIds(@Param("limit") int limit);
 
-    int markAgentMessagesReadUpTo(@Param("userId") String userId, @Param("lastReadMsgId") Long lastReadMsgId);
+    int markAgentMessagesReadUpTo(@Param("userId") String userId, @Param("lastReadMsgId") Long lastReadMsgId, @Param("agentId") Long agentId);
 
     /**
      * Count agent-direction messages for a user after a given message id.

@@ -477,6 +477,26 @@ img.cs-history-avatar {
   border-color: #07c160;
 }
 
+.cs-toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  background: #dc2626;
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  animation: cs-toast-in 0.3s ease;
+}
+@keyframes cs-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
 .cs-empty {
   flex: 1;
   display: grid;

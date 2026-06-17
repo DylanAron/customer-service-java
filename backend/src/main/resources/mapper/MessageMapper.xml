@@ -64,6 +64,9 @@
           AND direction = 'agent'
           AND id &lt;= #{lastReadMsgId}
           AND (is_read IS NULL OR is_read = false)
+        <if test="agentId != null">
+          AND agent_id = #{agentId}
+        </if>
     </update>
 
 </mapper>

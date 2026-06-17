@@ -76,6 +76,11 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
                     ObjectNode assignedMsg = mapper.createObjectNode();
                     assignedMsg.put("type", WsMsgType.SYSTEM);
                     assignedMsg.put("agent_assigned", String.valueOf(agentId));
+                    // 带上客服昵称，方便前端显示
+                    Optional<Agent> agentOpt = agentService.findById(agentId);
+                    if (agentOpt.isPresent()) {
+                        assignedMsg.put("agent_name", agentOpt.get().getNickname());
+                    }
                     ctx.writeAndFlush(new TextWebSocketFrame(assignedMsg.toString()));
                     notifyAgentNewUser(agentId, userId);
                     // 仅在新分配时发送问候语，每次重连不再重复
@@ -252,11 +257,22 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
             String fileUrl = json.has("fileUrl") ? json.get("fileUrl").asText() : null;
             String channelCode = json.has("channelCode") ? json.get("channelCode").asText() : null;
 
-            // Verify assignment
+            // Verify assignment — 原客服离线则允许接管
             Long assignedAgent = assignmentService.getAssignedAgent(userId);
-            if (assignedAgent == null || !assignedAgent.equals(agentId)) {
+            if (assignedAgent != null && !assignedAgent.equals(agentId)
+                    && assignmentService.isAgentOnline(assignedAgent)) {
+                // 分配给了其他在线客服，拒绝
                 System.err.println("Agent " + agentId + " not assigned to user " + userId + ", rejecting");
+                ObjectNode errMsg = mapper.createObjectNode();
+                errMsg.put("type", "agent_error");
+                errMsg.put("userId", userId);
+                errMsg.put("message", "用户当前由其他客服接待中，无法发送消息");
+                ctx.writeAndFlush(new TextWebSocketFrame(errMsg.toString()));
                 return;
+            }
+            // 无分配或原客服离线 → 当前客服接管
+            if (assignedAgent == null || !assignedAgent.equals(agentId)) {
+                assignmentService.assignAgentToUser(userId, agentId);
             }
 
             Message msg = messageService.saveMessage(userId, agentId, content, msgType, fileUrl, "agent", channelCode);

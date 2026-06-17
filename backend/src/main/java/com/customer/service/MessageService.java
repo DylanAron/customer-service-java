@@ -99,7 +99,10 @@ public class MessageService {
             messageMapper.assignUnassignedMessagesToAgent(userId, agentId);
         }
 
-        return getMessages(userId);
+        return messageMapper.selectList(new LambdaQueryWrapper<Message>()
+                .eq(Message::getUserId, userId)
+                .eq(Message::getAgentId, agentId)
+                .orderByAsc(Message::getCreatedAt));
     }
 
     public void markAsRead(String userId) {
@@ -141,12 +144,15 @@ public class MessageService {
             userInfo.put("nickname", user != null ? user.getNickname() : uid);
             userInfo.put("online", assignmentService.isUserOnline(uid));
 
-            // unread: 只看未读的用户消息（不管哪个客服发的）
+            // unread: 只看该客服名下未读的用户消息
             long unread = 0;
+            LambdaQueryWrapper<Message> unreadWrapper = new LambdaQueryWrapper<Message>()
+                    .eq(Message::getUserId, uid);
+            if (agentId != null) {
+                unreadWrapper.eq(Message::getAgentId, agentId);
+            }
             List<Message> msgs = messageMapper.selectList(
-                    new LambdaQueryWrapper<Message>()
-                            .eq(Message::getUserId, uid)
-                            .orderByAsc(Message::getCreatedAt));
+                    unreadWrapper.orderByAsc(Message::getCreatedAt));
             for (int i = msgs.size() - 1; i >= 0; i--) {
                 Message m = msgs.get(i);
                 if ("agent".equals(m.getDirection())) break;
@@ -154,12 +160,14 @@ public class MessageService {
             }
             userInfo.put("unread", unread);
 
-            // 最新一条消息（不管哪个客服的）
+            // 该客服名下最新一条消息
+            LambdaQueryWrapper<Message> lastMsgWrapper = new LambdaQueryWrapper<Message>()
+                    .eq(Message::getUserId, uid);
+            if (agentId != null) {
+                lastMsgWrapper.eq(Message::getAgentId, agentId);
+            }
             Message lastMsg = messageMapper.selectOne(
-                    new LambdaQueryWrapper<Message>()
-                            .eq(Message::getUserId, uid)
-                            .orderByDesc(Message::getCreatedAt)
-                            .last("LIMIT 1"));
+                    lastMsgWrapper.orderByDesc(Message::getCreatedAt).last("LIMIT 1"));
             if (lastMsg != null) {
                 userInfo.put("lastMessage", lastMsg.getContent());
                 userInfo.put("lastTime", lastMsg.getCreatedAt().toString());
@@ -218,16 +226,16 @@ public class MessageService {
 
     /**
      * 记录用户最后看到的消息 ID（存入 Redis，用于推送通知的增量查询基准），
-     * 同时将数据库中该用户接收的客服消息标记为已读。
+     * 同时将数据库中该用户接收的指定客服消息标记为已读。
      */
-    public void markUserRead(String userId, Long lastReadMsgId) {
+    public void markUserRead(String userId, Long lastReadMsgId, Long agentId) {
         if (lastReadMsgId == null) return;
         // 使用 Redis 存储，key: user:lastread:{userId}, value: msgId, TTL: 7 天
         String key = "user:lastread:" + userId;
         assignmentService.getRedisTemplate().opsForValue().set(
                 key, String.valueOf(lastReadMsgId),
                 java.time.Duration.ofDays(7));
-        // 同步更新数据库已读状态：将该用户下、id <= lastReadMsgId 的 agent 消息标为已读
-        messageMapper.markAgentMessagesReadUpTo(userId, lastReadMsgId);
+        // 同步更新数据库已读状态：将该用户下、指定客服的消息标为已读
+        messageMapper.markAgentMessagesReadUpTo(userId, lastReadMsgId, agentId);
     }
 }

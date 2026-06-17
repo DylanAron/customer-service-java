@@ -60,6 +60,7 @@ export default function AgentPanel() {
   const [newNickname, setNewNickname] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [displayNickname, setDisplayNickname] = useState(localStorage.getItem('nickname') || '客服')
+  const [toast, setToast] = useState(null)
 
   const wsRef = useRef(null)
   const messagesRef = useRef(null)
@@ -68,6 +69,12 @@ export default function AgentPanel() {
   const selectedUserRef = useRef(null)
   const selectRequestRef = useRef(0)
   const pingTimerRef = useRef(null)
+
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => setToast(null), 3000)
+    return () => clearTimeout(timer)
+  }, [toast])
 
   useEffect(() => {
     if (!token || !agentId || localStorage.getItem('role') !== 'agent') {
@@ -120,6 +127,8 @@ export default function AgentPanel() {
           loadUsers(0)
         } else if (msg.type === 'user_offline') {
           loadUsers(0)
+        } else if (msg.type === 'agent_error') {
+          setToast(msg.message || '消息发送失败')
         }
       },
       () => {
@@ -377,6 +386,9 @@ export default function AgentPanel() {
         )}
       </main>
 
+      {toast && (
+        <div className="cs-toast">{toast}</div>
+      )}
       {showProfile && (
         <div className="cs-modal-mask">
           <div className="cs-modal">

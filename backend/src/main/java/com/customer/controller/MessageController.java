@@ -62,10 +62,16 @@ public class MessageController {
             @PathVariable String userId,
             @RequestBody(required = false) Map<String, Object> body) {
         Long lastReadMsgId = null;
-        if (body != null && body.get("lastReadMsgId") != null) {
-            lastReadMsgId = ((Number) body.get("lastReadMsgId")).longValue();
+        Long agentId = null;
+        if (body != null) {
+            if (body.get("lastReadMsgId") != null) {
+                lastReadMsgId = ((Number) body.get("lastReadMsgId")).longValue();
+            }
+            if (body.get("agentId") != null) {
+                agentId = ((Number) body.get("agentId")).longValue();
+            }
         }
-        messageService.markUserRead(userId, lastReadMsgId);
+        messageService.markUserRead(userId, lastReadMsgId, agentId);
         return ResponseEntity.ok(Map.of("success", true));
     }
 
