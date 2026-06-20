@@ -243,10 +243,13 @@ public class RedisWebSocketManager {
 
     /**
      * Send a user-offline notification to the assigned agent.
+     * Falls back to Redis Pub/Sub when agent is on a different instance.
      */
     public void notifyUserOffline(Long agentId, String messageJson) {
         if (hasAgentLocally(agentId)) {
             sendToAllAgentChannels(agentId, messageJson);
+            return;
         }
+        publishNotification(messageJson);
     }
 }

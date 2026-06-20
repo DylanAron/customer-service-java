@@ -188,7 +188,7 @@ export default function AdminPanel() {
 
   async function loadUsers() {
     try {
-      const data = await request('/api/message/users?page=0&size=1000')
+      const data = await request('/api/message/users')
       setUsers(data)
     } catch (err) {
       if (handleAuthError(err)) return

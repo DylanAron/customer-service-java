@@ -53,9 +53,6 @@ export default function AgentPanel() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [connected, setConnected] = useState(false)
-  const [page, setPage] = useState(0)
-  const [hasMore, setHasMore] = useState(true)
-  const [loading, setLoading] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
   const [newNickname, setNewNickname] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -65,7 +62,6 @@ export default function AgentPanel() {
   const wsRef = useRef(null)
   const messagesRef = useRef(null)
   const messagesEndRef = useRef(null)
-  const userListRef = useRef(null)
   const selectedUserRef = useRef(null)
   const selectRequestRef = useRef(0)
   const pingTimerRef = useRef(null)
@@ -107,7 +103,7 @@ export default function AgentPanel() {
     const ws = connectWebSocket('/ws/agent/' + agentId,
       (msg) => {
         if (msg.type === 'new_user') {
-          loadUsers(0)
+          loadUsers()
         } else if (msg.type === 'agent_message') {
           if (msg.userId === selectedUserRef.current) {
             setMessages(prev => {
@@ -124,9 +120,9 @@ export default function AgentPanel() {
             })
             scrollToBottom()
           }
-          loadUsers(0)
+          loadUsers()
         } else if (msg.type === 'user_offline') {
-          loadUsers(0)
+          loadUsers()
         } else if (msg.type === 'agent_error') {
           setToast(msg.message || '消息发送失败')
         }
@@ -159,17 +155,12 @@ export default function AgentPanel() {
 
   useEffect(() => { scrollToBottom() }, [messages, scrollToBottom])
 
-  async function loadUsers(p) {
-    setLoading(true)
+  async function loadUsers() {
     try {
-      const data = await request('/api/message/users?page=' + p + '&size=30&agentId=' + agentId)
-      if (p === 0) setUsers(data)
-      else setUsers(prev => [...prev, ...data])
-      setHasMore(data.length === 30)
+      const data = await request('/api/message/users?agentId=' + agentId)
+      setUsers(data)
     } catch (err) {
       console.error('加载用户列表失败', err)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -227,15 +218,6 @@ export default function AgentPanel() {
     e.target.value = ''
   }
 
-  function handleScroll() {
-    const el = userListRef.current
-    if (el && el.scrollTop + el.clientHeight >= el.scrollHeight - 160 && hasMore && !loading) {
-      const newPage = page + 1
-      setPage(newPage)
-      loadUsers(newPage)
-    }
-  }
-
   async function updateProfile() {
     try {
       if (newNickname) {
@@ -262,7 +244,6 @@ export default function AgentPanel() {
     navigate('/agent/login')
   }
 
-  const visibleUsers = users
   const selectedUserInfo = users.find(u => u.userId === selectedUser)
   const selectedUserAvatar = getUserAvatar(selectedUser)
   const totalUnread = users.reduce((sum, u) => sum + (u.unread || 0), 0)
@@ -296,11 +277,11 @@ export default function AgentPanel() {
 
         <div className="cs-list-bar">
           <span>用户列表</span>
-          <button className="cs-link-btn" onClick={() => loadUsers(0)}>刷新</button>
+          <button className="cs-link-btn" onClick={() => loadUsers()}>刷新</button>
         </div>
 
-        <div ref={userListRef} onScroll={handleScroll} className="cs-user-list">
-          {visibleUsers.map(u => {
+        <div className="cs-user-list">
+          {users.map(u => {
             const active = selectedUser === u.userId
             const name = u.nickname || u.userId
             const avatar = getUserAvatar(u.userId)
@@ -318,8 +299,7 @@ export default function AgentPanel() {
               </button>
             )
           })}
-          {loading && <div className="cs-loading">加载中...</div>}
-          {!loading && visibleUsers.length === 0 && <div className="cs-empty-list">暂无会话</div>}
+          {users.length === 0 && <div className="cs-empty-list">暂无会话</div>}
         </div>
       </aside>
 

@@ -95,6 +95,13 @@ public class RedisAssignmentService {
      * 将用户直接分配给指定客服（用于接管离线客服的用户）。
      */
     public void assignAgentToUser(String userId, Long agentId) {
+        // 清理旧分配，避免用户同时出现在两个客服的 Set 里
+        String oldAgentId = redisTemplate.opsForValue()
+                .get(ApiConst.REDIS_KEY_ASSIGNMENT_USER + userId);
+        if (oldAgentId != null && !oldAgentId.equals(String.valueOf(agentId))) {
+            redisTemplate.opsForSet()
+                    .remove(ApiConst.REDIS_KEY_ASSIGNMENT_AGENT + oldAgentId, userId);
+        }
         redisTemplate.opsForValue().set(
                 ApiConst.REDIS_KEY_ASSIGNMENT_USER + userId,
                 String.valueOf(agentId),
@@ -184,8 +191,11 @@ public class RedisAssignmentService {
     /**
      * 给指定在线客服认领一批离线留言用户。
      * batchSize 表示最多认领的用户数，不是消息条数；每个用户被认领后，会把该用户所有未归属消息一起归到该客服。
+     *
+     * 无需 synchronized 或分布式锁：每个用户的 Redis SET IF ABSENT 是原子操作，
+     * 多实例间不会重复分配同一用户。
      */
-    public synchronized int assignPendingUsers(Long agentId, int batchSize) {
+    public int assignPendingUsers(Long agentId, int batchSize) {
         if (!isAgentOnline(agentId)) {
             log.warn("Agent {} is not online, skipping pending assignment", agentId);
             return 0;

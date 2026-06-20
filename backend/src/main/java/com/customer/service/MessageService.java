@@ -187,14 +187,6 @@ public class MessageService {
         return result;
     }
 
-    public List<Map<String, Object>> getPaginatedUsers(int page, int size, Long agentId) {
-        List<Map<String, Object>> allUsers = getUserList(agentId);
-        int from = page * size;
-        int to = Math.min(from + size, allUsers.size());
-        if (from >= allUsers.size()) return List.of();
-        return allUsers.subList(from, to);
-    }
-
     public List<Message> getAllMessagesForAdmin() {
         return messageMapper.selectList(null);
     }

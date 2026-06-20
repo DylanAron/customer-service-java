@@ -92,16 +92,22 @@ public class SettingService {
     }
 
     private String getSetting(String key, String defaultVal) {
-        // 1. 本地缓存（含空字符串也视为未命中，避免缓存了空值）
+        // 1. 本地缓存（空字符串表示已查询过 DB 但值为空，直接返回默认值）
         String cached = localCache.getIfPresent(key);
-        if (cached != null && !cached.isEmpty()) return cached;
+        if (cached != null) {
+            if (!cached.isEmpty()) return cached;
+            return defaultVal;
+        }
 
         // 2. 数据库
         Setting setting = settingMapper.selectOne(
                 new LambdaQueryWrapper<Setting>().eq(Setting::getSettingKey, key));
-        if (setting != null && setting.getSettingValue() != null && !setting.getSettingValue().isEmpty()) {
+        if (setting != null && setting.getSettingValue() != null) {
             localCache.put(key, setting.getSettingValue());
-            return setting.getSettingValue();
+            if (!setting.getSettingValue().isEmpty()) {
+                return setting.getSettingValue();
+            }
+            return defaultVal;
         }
 
         return defaultVal;

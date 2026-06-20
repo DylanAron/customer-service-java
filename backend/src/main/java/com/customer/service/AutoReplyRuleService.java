@@ -98,7 +98,11 @@ public class AutoReplyRuleService {
     }
 
     public Optional<AutoReplyMatch> match(String userId, String content) {
-        if (isBlankText(content) || !claimUserCooldown(userId)) {
+        if (isBlankText(content)) {
+            return Optional.empty();
+        }
+        if (!claimUserCooldown(userId)) {
+            // 冷却中：上次匹配关键词自动回复后未满 2 分钟，跳过
             return Optional.empty();
         }
         String normalizedContent = normalizeText(content);
@@ -109,6 +113,7 @@ public class AutoReplyRuleService {
                 }
             }
         }
+        // 未匹配到关键词，释放冷却，允许下条消息重新尝试
         releaseUserCooldown(userId);
         return Optional.empty();
     }

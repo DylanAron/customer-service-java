@@ -97,8 +97,6 @@ public class MessageController {
 
     @GetMapping("/users")
     public ResponseEntity<?> getUsers(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "30") int size,
             @RequestParam(required = false) Long agentId,
             HttpServletRequest request) {
         Long requesterAgentId = authHelper.validateAgentOrAdminRequest(request);
@@ -111,7 +109,7 @@ public class MessageController {
         if (agentId != null && !requesterAgentId.equals(agentId) && !requesterAgentId.equals(0L)) {
             return ResponseEntity.status(403).body(Map.of("error", "无权查看其他客服的用户"));
         }
-        return ResponseEntity.ok(messageService.getPaginatedUsers(page, size, agentId));
+        return ResponseEntity.ok(messageService.getUserList(agentId));
     }
 
     @PostMapping("/mark-read/{userId}")

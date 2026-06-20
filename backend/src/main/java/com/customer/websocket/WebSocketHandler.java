@@ -213,12 +213,8 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
                     sendAssignedGreeting(ctx, userId, assignedAgent);
                 }
 
-                // Forward to agent (broadcast to all tabs if local)
-                if (wsManager.hasAgentLocally(assignedAgent)) {
-                    wsManager.publishUserMessage(assignedAgent, response.toString());
-                } else {
-                    wsManager.publishUserMessage(assignedAgent, response.toString());
-                }
+                // Forward to agent (local or cross-instance via Redis Pub/Sub)
+                wsManager.publishUserMessage(assignedAgent, response.toString());
             } else {
                 // No online agent: auto-reply only, once per connection
                 if (ctx.channel().attr(AUTO_REPLIED).compareAndSet(null, Boolean.TRUE)) {
@@ -305,10 +301,11 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
         if (userId != null) {
             wsManager.unregisterByChannel(channelId);
             Long assignedAgent = assignmentService.getAssignedAgent(userId);
-            if (assignedAgent != null && wsManager.hasAgentLocally(assignedAgent)) {
+            if (assignedAgent != null) {
                 try {
                     ObjectNode notification = mapper.createObjectNode();
                     notification.put("type", WsMsgType.USER_OFFLINE);
+                    notification.put("agentId", assignedAgent);
                     notification.put("userId", userId);
                     wsManager.notifyUserOffline(assignedAgent, notification.toString());
                 } catch (Exception ignored) {}
@@ -326,16 +323,15 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
     // ========== Helper methods ==========
 
     private void notifyAgentNewUser(Long agentId, String userId) {
-        if (wsManager.hasAgentLocally(agentId)) {
-            try {
-                ObjectNode msg = mapper.createObjectNode();
-                msg.put("type", WsMsgType.NEW_USER);
-                msg.put("userId", userId);
-                msg.put("content", "New user assigned to you");
-                wsManager.notifyAgentChannel(agentId, msg.toString());
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+        try {
+            ObjectNode msg = mapper.createObjectNode();
+            msg.put("type", WsMsgType.NEW_USER);
+            msg.put("agentId", agentId);
+            msg.put("userId", userId);
+            msg.put("content", "New user assigned to you");
+            wsManager.publishNotification(msg.toString());
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
